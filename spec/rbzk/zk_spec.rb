@@ -2,21 +2,21 @@ RSpec.describe RBZK::ZK do
   let(:ip) { '192.168.1.201' }
   let(:port) { 4370 }
   let(:zk) { RBZK::ZK.new(ip, port: port) }
-  
+
   describe '#initialize' do
     it 'creates a new ZK instance with default values' do
       expect(zk).to be_a(RBZK::ZK)
     end
-    
+
     it 'accepts custom parameters' do
       custom_zk = RBZK::ZK.new(ip, port: 4371, timeout: 30, password: 123456, force_udp: true, verbose: true)
       expect(custom_zk).to be_a(RBZK::ZK)
     end
   end
-  
+
   # Note: The following tests would require a real ZK device or a mock
   # They are commented out as they would fail without proper setup
-  
+
   # describe '#connect' do
   #   it 'connects to the device' do
   #     allow(zk).to receive(:ping).and_return(true)
@@ -27,7 +27,7 @@ RSpec.describe RBZK::ZK do
   #     expect(zk.instance_variable_get(:@connected)).to be true
   #   end
   # end
-  
+
   # describe '#disconnect' do
   #   it 'disconnects from the device' do
   #     zk.instance_variable_set(:@connected, true)

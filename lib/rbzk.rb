@@ -1,14 +1,15 @@
 # frozen_string_literal: true
 
-require "rbzk/version"
-require "rbzk/constants"
-require "rbzk/exceptions"
-require "rbzk/user"
-require "rbzk/attendance"
-require "rbzk/finger"
-require "rbzk/zk"
+require_relative "rbzk/version"
+require_relative "rbzk/constants"
+require_relative "rbzk/exceptions"
+require_relative "rbzk/user"
+require_relative "rbzk/attendance"
+require_relative "rbzk/finger"
+require_relative "rbzk/zk"
 
 module RBZK
   class Error < StandardError; end
+
   # Your code goes here...
 end

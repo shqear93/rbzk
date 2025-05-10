@@ -10,11 +10,11 @@ zk = RBZK::ZK.new('192.168.1.201', port: 4370)
 begin
   # Connect to the device
   conn = zk.connect
-  
+
   # Disable the device to ensure exclusive access
   puts 'Disabling device...'
   conn.disable_device
-  
+
   puts '--- Get Attendance Logs ---'
   logs = conn.get_attendance_logs
   logs.each do |log|
@@ -25,7 +25,7 @@ begin
     puts "UID: #{log.uid}"
     puts "---"
   end
-  
+
   # Re-enable the device when done
   puts 'Enabling device...'
   conn.enable_device

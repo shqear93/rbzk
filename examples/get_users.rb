@@ -10,17 +10,17 @@ zk = RBZK::ZK.new('192.168.1.201', port: 4370)
 begin
   # Connect to the device
   conn = zk.connect
-  
+
   # Disable the device to ensure exclusive access
   puts 'Disabling device...'
   conn.disable_device
-  
+
   puts '--- Get Users ---'
   users = conn.get_users
   users.each do |user|
     privilege = 'User'
     privilege = 'Admin' if user.privilege == RBZK::Constants::USER_ADMIN
-    
+
     puts "UID: #{user.uid}"
     puts "Name: #{user.name}"
     puts "Privilege: #{privilege}"
@@ -29,11 +29,11 @@ begin
     puts "User ID: #{user.user_id}"
     puts "---"
   end
-  
+
   # Test the device voice
   puts "Testing voice..."
   conn.test_voice
-  
+
   # Re-enable the device when done
   puts 'Enabling device...'
   conn.enable_device
