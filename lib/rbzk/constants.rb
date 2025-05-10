@@ -118,7 +118,10 @@ module RBZK
     FCT_UDATA = 7
 
     # Machine constants
-    MACHINE_PREPARE_DATA_1 = 20560 # 0x5050
-    MACHINE_PREPARE_DATA_2 = 32130 # 0x7282
+    # These values are in little-endian format when packed
+    # 0x5050 = 'PP' in ASCII when packed as '<H'
+    MACHINE_PREPARE_DATA_1 = 20560 # 0x5050 = 'P' + 'P'*256 in little-endian
+    # 0x7D82 = 0x827D in little-endian format
+    MACHINE_PREPARE_DATA_2 = 32130 # 0x7D82
   end
 end

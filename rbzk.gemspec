@@ -20,6 +20,10 @@ Gem::Specification.new do |spec|
   spec.files = Dir.glob(%w[lib/**/*.rb LICENSE.txt README.md CHANGELOG.md])
   spec.require_paths = [ "lib" ]
 
+  # Runtime dependencies
+  spec.add_dependency "bytes", "~> 0.1"
+
+  # Development dependencies
   spec.add_development_dependency "bundler", "~> 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.0"
