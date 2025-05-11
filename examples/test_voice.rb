@@ -84,11 +84,6 @@ begin
   if conn.connect
     puts "✓ Connected successfully!"
 
-    # Disable the device to ensure exclusive access
-    puts "\nDisabling device..."
-    conn.disable_device
-    puts "✓ Device disabled"
-
     # Test voice
     voice_description = VOICE_DESCRIPTIONS[options[:index]] || "Unknown"
     puts "\nTesting voice #{options[:index]} (#{voice_description})..."

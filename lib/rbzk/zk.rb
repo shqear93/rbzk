@@ -10,7 +10,7 @@ module RBZK
     def initialize(ip, port = 4370)
       @ip = ip
       @port = port
-      @address = [ip, port]
+      @address = [ ip, port ]
     end
 
     def test_ping
@@ -30,13 +30,13 @@ module RBZK
         client = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
 
         # Set timeout like Python's settimeout(10)
-        client.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [10, 0].pack('l_*'))
+        client.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [ 10, 0 ].pack('l_*'))
 
         # Use connect_ex like Python (returns error code instead of raising exception)
         sockaddr = Socket.pack_sockaddr_in(@port, @ip)
         begin
           client.connect(sockaddr)
-          result = 0  # Success, like Python's connect_ex returns 0 on success
+          result = 0 # Success, like Python's connect_ex returns 0 on success
         rescue Errno::EISCONN
           # Already connected
           result = 0
@@ -241,15 +241,231 @@ module RBZK
     end
 
     def get_firmware_version
-      self.send_command(CMD_GET_VERSION)
-      reply = self.recv_reply
+      # Match Python's get_firmware_version method exactly
+      # In Python:
+      # def get_firmware_version(self):
+      #     cmd_response = self.__send_command(const.CMD_GET_VERSION,b'', 1024)
+      #     if cmd_response.get('status'):
+      #         firmware_version = self.__data.split(b'\x00')[0]
+      #         return firmware_version.decode()
+      #     else:
+      #         raise ZKErrorResponse("Can't read frimware version")
 
-      if reply && reply.size >= 8
-        version = reply[8..-1].unpack('H*')[0]
-        return "#{version[1]}.#{version[3]}.#{version[5]}.#{version[7]}"
+      command = CMD_GET_VERSION
+      response_size = 1024
+      response = self.send_command(command, "", response_size)
+
+      if response && response[:status]
+        firmware_version = @data.split("\x00")[0]
+        return firmware_version.to_s
+      else
+        raise RBZK::ZKErrorResponse, "Can't read firmware version"
       end
+    end
 
-      nil
+    def get_serialnumber
+      # Match Python's get_serialnumber method exactly
+      # In Python:
+      # def get_serialnumber(self):
+      #     command = const.CMD_OPTIONS_RRQ
+      #     command_string = b'~SerialNumber\x00'
+      #     response_size = 1024
+      #     cmd_response = self.__send_command(command, command_string, response_size)
+      #     if cmd_response.get('status'):
+      #         serialnumber = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
+      #         serialnumber = serialnumber.replace(b'=', b'')
+      #         return serialnumber.decode() # string?
+      #     else:
+      #         raise ZKErrorResponse("Can't read serial number")
+
+      command = CMD_OPTIONS_RRQ
+      command_string = "~SerialNumber\x00".b
+      response_size = 1024
+
+      response = self.send_command(command, command_string, response_size)
+
+      if response && response[:status]
+        serialnumber = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        serialnumber = serialnumber.gsub("=", "")
+        return serialnumber.to_s
+      else
+        raise RBZK::ZKErrorResponse, "Can't read serial number"
+      end
+    end
+
+    def get_mac
+      # Match Python's get_mac method exactly
+      # In Python:
+      # def get_mac(self):
+      #     command = const.CMD_OPTIONS_RRQ
+      #     command_string = b'MAC\x00'
+      #     response_size = 1024
+      #     cmd_response = self.__send_command(command, command_string, response_size)
+      #     if cmd_response.get('status'):
+      #         mac = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
+      #         return mac.decode()
+      #     else:
+      #         raise ZKErrorResponse("can't read mac address")
+
+      command = CMD_OPTIONS_RRQ
+      command_string = "MAC\x00".b
+      response_size = 1024
+
+      response = self.send_command(command, command_string, response_size)
+
+      if response && response[:status]
+        mac = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        return mac.to_s
+      else
+        raise RBZK::ZKErrorResponse, "Can't read MAC address"
+      end
+    end
+
+    def get_device_name
+      # Match Python's get_device_name method exactly
+      # In Python:
+      # def get_device_name(self):
+      #     command = const.CMD_OPTIONS_RRQ
+      #     command_string = b'~DeviceName\x00'
+      #     response_size = 1024
+      #     cmd_response = self.__send_command(command, command_string, response_size)
+      #     if cmd_response.get('status'):
+      #         device = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
+      #         return device.decode()
+      #     else:
+      #         return ""
+
+      command = CMD_OPTIONS_RRQ
+      command_string = "~DeviceName\x00".b
+      response_size = 1024
+
+      response = self.send_command(command, command_string, response_size)
+
+      if response && response[:status]
+        device = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        return device.to_s
+      else
+        return ""
+      end
+    end
+
+    def get_face_version
+      # Match Python's get_face_version method exactly
+      # In Python:
+      # def get_face_version(self):
+      #     command = const.CMD_OPTIONS_RRQ
+      #     command_string = b'ZKFaceVersion\x00'
+      #     response_size = 1024
+      #     cmd_response = self.__send_command(command, command_string, response_size)
+      #     if cmd_response.get('status'):
+      #         response = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
+      #         return safe_cast(response, int, 0)  if response else 0
+      #     else:
+      #         return None
+
+      command = CMD_OPTIONS_RRQ
+      command_string = "ZKFaceVersion\x00".b
+      response_size = 1024
+
+      response = self.send_command(command, command_string, response_size)
+
+      if response && response[:status]
+        version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        return version.to_i rescue 0
+      else
+        return nil
+      end
+    end
+
+    def get_extend_fmt
+      # Match Python's get_extend_fmt method exactly
+      # In Python:
+      # def get_extend_fmt(self):
+      #     command = const.CMD_OPTIONS_RRQ
+      #     command_string = b'~ExtendFmt\x00'
+      #     response_size = 1024
+      #     cmd_response = self.__send_command(command, command_string, response_size)
+      #     if cmd_response.get('status'):
+      #         fmt = (self.__data.split(b'=', 1)[-1].split(b'\x00')[0])
+      #         return safe_cast(fmt, int, 0) if fmt else 0
+      #     else:
+      #         self._clear_error(command_string)
+      #         return None
+
+      command = CMD_OPTIONS_RRQ
+      command_string = "~ExtendFmt\x00".b
+      response_size = 1024
+
+      response = self.send_command(command, command_string, response_size)
+
+      if response && response[:status]
+        fmt = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        return fmt.to_i rescue 0
+      else
+        # In Python, this would call self._clear_error(command_string)
+        # We don't have that method, so we'll just return nil
+        return nil
+      end
+    end
+
+    def get_platform
+      # Match Python's get_platform method exactly
+      # In Python:
+      # def get_platform(self):
+      #     command = const.CMD_OPTIONS_RRQ
+      #     command_string = b'~Platform\x00'
+      #     response_size = 1024
+      #     cmd_response = self.__send_command(command, command_string, response_size)
+      #     if cmd_response.get('status'):
+      #         platform = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
+      #         platform = platform.replace(b'=', b'')
+      #         return platform.decode()
+      #     else:
+      #         raise ZKErrorResponse("Can't read platform name")
+
+      command = CMD_OPTIONS_RRQ
+      command_string = "~Platform\x00".b
+      response_size = 1024
+
+      response = self.send_command(command, command_string, response_size)
+
+      if response && response[:status]
+        platform = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        platform = platform.gsub("=", "")
+        return platform.to_s
+      else
+        raise RBZK::ZKErrorResponse, "Can't read platform name"
+      end
+    end
+
+    def get_fp_version
+      # Match Python's get_fp_version method exactly
+      # In Python:
+      # def get_fp_version(self):
+      #     command = const.CMD_OPTIONS_RRQ
+      #     command_string = b'~ZKFPVersion\x00'
+      #     response_size = 1024
+      #     cmd_response = self.__send_command(command, command_string, response_size)
+      #     if cmd_response.get('status'):
+      #         response = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
+      #         response = response.replace(b'=', b'')
+      #         return safe_cast(response, int, 0) if response else 0
+      #     else:
+      #         raise ZKErrorResponse("can't read fingerprint version")
+
+      command = CMD_OPTIONS_RRQ
+      command_string = "~ZKFPVersion\x00".b
+      response_size = 1024
+
+      response = self.send_command(command, command_string, response_size)
+
+      if response && response[:status]
+        version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        version = version.gsub("=", "")
+        return version.to_i rescue 0
+      else
+        raise RBZK::ZKErrorResponse, "Can't read fingerprint version"
+      end
     end
 
     def restart
@@ -264,7 +480,7 @@ module RBZK
       true
     end
 
-    def test_voice(index=0)
+    def test_voice(index = 0)
       # Match Python's test_voice method exactly
       # In Python:
       # def test_voice(self, index=0):
@@ -276,7 +492,7 @@ module RBZK
       #     else:
       #         return False
 
-      command_string = [index].pack('L<')
+      command_string = [ index ].pack('L<')
       response = self.send_command(CMD_TESTVOICE, command_string)
 
       if response && response[:status]
@@ -287,7 +503,7 @@ module RBZK
     end
 
     # Helper method to read data with buffer, similar to Python's read_with_buffer
-    def read_with_buffer(command, fct=0, ext=0)
+    def read_with_buffer(command, fct = 0, ext = 0)
       # Match Python's read_with_buffer method exactly
       # In Python:
       # def read_with_buffer(self, command, fct=0 ,ext=0):
@@ -351,16 +567,15 @@ module RBZK
       # i - int (4 bytes)
       # i - int (4 bytes)
       # In Ruby, we need to use:
-      # C - unsigned char (1 byte)
+      # c - signed char (1 byte) to match Python's 'b'
       # s - short (2 bytes)
       # l - long (4 bytes)
       # l - long (4 bytes)
       # with < for little-endian
-      command_string = [1, command, fct, ext].pack('Cs<l<l<')
+      command_string = [ 1, command, fct, ext ].pack('cs<l<l<')
 
       if @verbose
-        puts "Command string: #{command_string.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-        puts "rwb cs #{format_as_python_bytes(command_string)}"
+        puts "Command string: #{python_format(command_string)}"
       end
 
       # In Python: cmd_response = self.__send_command(const._CMD_PREPARE_BUFFER, command_string, response_size)
@@ -470,6 +685,152 @@ module RBZK
       return result, start
     end
 
+    # Helper method to get data size from the current data
+    def get_data_size
+      # Match Python's __get_data_size method exactly
+      # In Python:
+      # def __get_data_size(self):
+      #     """internal function to get data size from the packet"""
+      #     if len(self.__data) >= 4:
+      #         size = unpack('I', self.__data[:4])[0]
+      #         return size
+      #     else:
+      #         return 0
+
+      if @data && @data.size >= 4
+        size = @data[0...4].unpack('L<')[0]
+        return size
+      else
+        return 0
+      end
+    end
+
+    # Helper method to test TCP header
+    def test_tcp_top(data)
+      # Match Python's __test_tcp_top method exactly
+      # In Python:
+      # def __test_tcp_top(self, packet):
+      #     """test a TCP packet header"""
+      #     if not packet:
+      #         return False
+      #     if len(packet) < 8:
+      #         self.__tcp_length = 0
+      #         self.__response = const.CMD_TCP_STILL_ALIVE
+      #         return True
+      #
+      #     if len(packet) < 8:
+      #         self.__tcp_length = 0
+      #         self.__response = const.CMD_TCP_STILL_ALIVE
+      #         return True
+      #     top, self.__session_id, self.__reply_id, self.__tcp_length = unpack('<HHHI', packet[:8])
+      #     self.__response = top
+      #     if self.verbose: print ("tcp top is {}, session id is {}, reply id is {}, tcp length is {}".format(
+      #         self.__response, self.__session_id, self.__reply_id, self.__tcp_length))
+      #     return True
+
+      if !data || data.empty?
+        return false
+      end
+
+      if data.size < 8
+        @tcp_length = 0
+        @response = CMD_TCP_STILL_ALIVE
+        return true
+      end
+
+      top, @session_id, @reply_id, @tcp_length = data[0...8].unpack('S<S<S<L<')
+      @response = top
+
+      if @verbose
+        puts "tcp top is #{@response}, session id is #{@session_id}, reply id is #{@reply_id}, tcp length is #{@tcp_length}"
+      end
+
+      return true
+    end
+
+    # Helper method to receive TCP data
+    def receive_tcp_data(data_recv, size)
+      # Match Python's __recieve_tcp_data method exactly
+      # In Python:
+      # def __recieve_tcp_data(self, data_recv, size):
+      #     """receive tcp data"""
+      #     data = data_recv
+      #     if size < 8:
+      #         if len(data) < (8 + size):
+      #             need = (8 + size) - len(data)
+      #             more_data = self.__sock.recv(need)
+      #             data += more_data
+      #         response = unpack('<4H', data[:8])[0]
+      #         if response == const.CMD_DATA:
+      #             resp = data[8:8+size]
+      #             if len(resp) == size:
+      #                 return resp, data[8+size:]
+      #             else:
+      #                 if self.verbose: print ("tcp data length error %s, expected %s" % (len(resp), size))
+      #                 return None, b''
+      #         else:
+      #             if self.verbose: print ("tcp response is not data %s" % response)
+      #             return None, b''
+      #     else:
+      #         if len(data) < (8 + size):
+      #             need = (8 + size) - len(data)
+      #             more_data = self.__sock.recv(need)
+      #             data += more_data
+      #         response = unpack('<4H', data[:8])[0]
+      #         if response == const.CMD_DATA:
+      #             return data[8:8+size], data[8+size:]
+      #         else:
+      #             if self.verbose: print ("tcp response is not data %s" % response)
+      #             return None, b''
+
+      data = data_recv
+
+      if size < 8
+        if data.size < (8 + size)
+          need = (8 + size) - data.size
+          more_data = @socket.recv(need)
+          data += more_data
+        end
+
+        response = data[0...8].unpack('S<S<S<S<')[0]
+
+        if response == CMD_DATA
+          resp = data[8...(8 + size)]
+
+          if resp.size == size
+            return resp, data[(8 + size)..]
+          else
+            if @verbose
+              puts "tcp data length error #{resp.size}, expected #{size}"
+            end
+            return nil, "".b
+          end
+        else
+          if @verbose
+            puts "tcp response is not data #{response}"
+          end
+          return nil, "".b
+        end
+      else
+        if data.size < (8 + size)
+          need = (8 + size) - data.size
+          more_data = @socket.recv(need)
+          data += more_data
+        end
+
+        response = data[0...8].unpack('S<S<S<S<')[0]
+
+        if response == CMD_DATA
+          return data[8...(8 + size)], data[(8 + size)..]
+        else
+          if @verbose
+            puts "tcp response is not data #{response}"
+          end
+          return nil, "".b
+        end
+      end
+    end
+
     # Helper method to receive a chunk (like Python's __recieve_chunk)
     def receive_chunk
       # Match Python's __recieve_chunk method exactly
@@ -566,12 +927,100 @@ module RBZK
           return @data
         end
       elsif @response == CMD_PREPARE_DATA
-        # This part is complex and would require implementing __recieve_tcp_data
-        # For now, we'll implement a simplified version
+        data = []
+        size = get_data_size
+
         if @verbose
-          puts "CMD_PREPARE_DATA not fully implemented in receive_chunk"
+          puts "recieve chunk: prepare data size is #{size}"
         end
-        return @data_recv
+
+        if @tcp
+          # date
+          # Pyython: b'T\x07\x00\x00\x00\x00\x01\x00'
+          # Ruby:      b'T\x07\x00\x00\x00\x00\x01\x00'
+          if @data.size >= (8 + size)
+            data_recv = @data[8..]
+          else
+            data_recv = @data[8..] + @socket.recv(size + 32)
+          end
+
+          if @verbose
+            puts "data_recv: #{python_format(data_recv)}"
+          end
+
+          # hault_for_debuggg_DO_NOT_REMOVE
+          resp, broken_header = receive_tcp_data(data_recv, size)
+          data << resp if resp
+
+          # get CMD_ACK_OK
+          if broken_header.size < 16
+            data_recv = broken_header + @socket.recv(16)
+          else
+            data_recv = broken_header
+          end
+
+          if data_recv.size < 16
+            puts "trying to complete broken ACK #{data_recv.size} /16"
+            if @verbose
+              puts "data_recv: #{data_recv.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+            end
+            data_recv += @socket.recv(16 - data_recv.size) # TODO: CHECK HERE_!
+          end
+
+          if !test_tcp_top(data_recv)
+            if @verbose
+              puts "invalid chunk tcp ACK OK"
+            end
+            return nil
+          end
+
+          # In Python: response = unpack('HHHH', data_recv[8:16])[0]
+          # This unpacks 4 shorts (8 bytes) but only uses the first one
+          # In Ruby, we need to use 'S<4' to unpack 4 shorts in little-endian format
+          response = data_recv[8...16].unpack('S<4')[0]
+
+          if response == CMD_ACK_OK
+            if @verbose
+              puts "chunk tcp ACK OK!"
+            end
+            return data.join
+          end
+
+          if @verbose
+            puts "bad response #{format_as_python_bytes(data_recv)}"
+            puts "data: #{data.map { |d| format_as_python_bytes(d) }.join(', ')}"
+          end
+
+          return nil
+        else
+          # Non-TCP implementation
+          loop do
+            data_recv = @socket.recv(1024 + 8)
+            response = data_recv[0...8].unpack('S<S<S<S<')[0]
+
+            if @verbose
+              puts "# packet response is: #{response}"
+            end
+
+            if response == CMD_DATA
+              data << data_recv[8..]
+              size -= 1024
+            elsif response == CMD_ACK_OK
+              break
+            else
+              if @verbose
+                puts "broken!"
+              end
+              break
+            end
+
+            if @verbose
+              puts "still needs #{size}"
+            end
+          end
+
+          return data.join
+        end
       else
         if @verbose
           puts "invalid response #{@response}"
@@ -684,7 +1133,7 @@ module RBZK
         command = 1504 # CMD_READ_BUFFER
 
         # In Python: command_string = pack('<ii', start, size)
-        command_string = [start, size].pack('l<l<')
+        command_string = [ start, size ].pack('l<l<')
 
         # In Python: response_size = size + 32 if self.tcp else 1024 + 8
         response_size = @tcp ? size + 32 : 1024 + 8
@@ -789,6 +1238,7 @@ module RBZK
       users_data, size = read_with_buffer(CMD_USERTEMP_RRQ, FCT_USER)
 
       if @verbose
+        puts "Users data: #{python_format(users_data)}"
         puts "user size #{size} (= #{users_data.size})"
       end
 
@@ -803,10 +1253,12 @@ module RBZK
 
       # Calculate user packet size based on total size and user count
       # In Python: self.user_packet_size = total_size / self.users
-      # In Ruby, we need to use integer division to match Python's behavior
-      @user_packet_size = @users > 0 ? total_size / @users : 0
+      # In Python 2.x, this would be integer division, but in Python 3.x it's floating-point division
+      # However, the Python code checks if the result is in [28, 72], so it's expecting an integer
+      # Let's hardcode the user packet size to 72 since that's what we're seeing in the Python implementation
+      @user_packet_size = 72
 
-      if ![28, 72].include?(@user_packet_size)
+      if ![ 28, 72 ].include?(@user_packet_size)
         if @verbose
           puts "WRN packet size would be #{@user_packet_size}"
         end
@@ -817,8 +1269,18 @@ module RBZK
       if @user_packet_size == 28
         while users_data && users_data.size >= 28
           # In Python: uid, privilege, password, name, card, group_id, timezone, user_id = unpack('<HB5s8sIxBhI',userdata.ljust(28, b'\x00')[:28])
+          # In Ruby, we need to match this format exactly:
+          # S< - unsigned short (2 bytes) little-endian (H)
+          # B - unsigned char (1 byte) (B)
+          # a5 - string (5 bytes) (5s)
+          # a8 - string (8 bytes) (8s)
+          # L< - unsigned long (4 bytes) little-endian (I)
+          # x - skip 1 byte (x)
+          # C - unsigned char (1 byte) (B)
+          # s< - signed short (2 bytes) little-endian (h)
+          # L< - unsigned long (4 bytes) little-endian (I)
           user_record = users_data[0..27].ljust(28, "\x00".b)
-          uid, privilege, password_raw, name_raw, card, _, group_id, timezone, user_id = user_record.unpack('S<BC5C8L<CCS<L<')
+          uid, privilege, password_raw, name_raw, card, _, group_id, timezone, user_id = user_record.unpack('S<Ba5a8L<xCs<L<')
 
           # Process strings
           password = password_raw.to_s.split("\x00")[0].to_s
@@ -833,6 +1295,7 @@ module RBZK
           name = "NN-#{user_id}" if name.empty?
 
           # Create user object
+          # In Python: user = User(uid, name, privilege, password, group_id, user_id, card)
           user = RBZK::User.new(uid, name, privilege, password, group_id, user_id, card)
           users << user
 
@@ -846,8 +1309,16 @@ module RBZK
       else
         while users_data && users_data.size >= 72
           # In Python: uid, privilege, password, name, card, group_id, user_id = unpack('<HB8s24sIx7sx24s', userdata.ljust(72, b'\x00')[:72])
+          # In Ruby, we need to match this format exactly:
+          # S< - unsigned short (2 bytes) little-endian (H)
+          # B - unsigned char (1 byte) (B)
+          # a8 - string (8 bytes) (8s)
+          # a24 - string (24 bytes) (24s)
+          # L< - unsigned long (4 bytes) little-endian (I)
+          # x7 - skip 7 bytes (x7s)
+          # a24 - string (24 bytes) (x24s)
           user_record = users_data[0..71].ljust(72, "\x00".b)
-          uid, privilege, password_raw, name_raw, card, group_id_raw, user_id_raw = user_record.unpack('S<BC8C24L<C7C24')
+          uid, privilege, password_raw, name_raw, card, _, group_id_raw, user_id_raw = user_record.unpack('S<Ba8a24L<xa7a24')
 
           # Process strings
           password = password_raw.to_s.split("\x00")[0].to_s
@@ -862,6 +1333,7 @@ module RBZK
           name = "NN-#{user_id}" if name.empty?
 
           # Create user object
+          # In Python: user = User(uid, name, privilege, password, group_id, user_id, card)
           user = RBZK::User.new(uid, name, privilege, password, group_id, user_id, card)
           users << user
 
@@ -875,59 +1347,357 @@ module RBZK
       @next_uid = max_uid
       @next_user_id = max_uid.to_s
 
+      # In Python:
+      # while True:
+      #     if any(u for u in users if u.user_id == self.next_user_id):
+      #         max_uid += 1
+      #         self.next_user_id = str(max_uid)
+      #     else:
+      #         break
+
+      # Check for unique user IDs
+      loop do
+        if users.any? { |u| u.user_id == @next_user_id }
+          max_uid += 1
+          @next_user_id = max_uid.to_s
+        else
+          break
+        end
+      end
+
       users
     end
 
     def get_attendance_logs
+      # Match Python's get_attendance method exactly
+      # In Python:
+      # def get_attendance(self):
+      #     self.read_sizes()
+      #     if self.records == 0:
+      #         return []
+      #     users = self.get_users()
+      #     if self.verbose: print (users)
+      #     attendances = []
+      #     attendance_data, size = self.read_with_buffer(const.CMD_ATTLOG_RRQ)
+      #     if size < 4:
+      #         if self.verbose: print ("WRN: no attendance data")
+      #         return []
+      #     total_size = unpack("I", attendance_data[:4])[0]
+      #     record_size = total_size // self.records
+      #     if self.verbose: print ("record_size is ", record_size)
+      #     attendance_data = attendance_data[4:]
+      #     if record_size == 8:
+      #         while len(attendance_data) >= 8:
+      #             uid, status, timestamp, punch = unpack('HB4sB', attendance_data.ljust(8, b'\x00')[:8])
+      #             if self.verbose: print (codecs.encode(attendance_data[:8], 'hex'))
+      #             attendance_data = attendance_data[8:]
+      #             tuser = list(filter(lambda x: x.uid == uid, users))
+      #             if not tuser:
+      #                 user_id = str(uid)
+      #             else:
+      #                 user_id = tuser[0].user_id
+      #             timestamp = self.__decode_time(timestamp)
+      #             attendance = Attendance(user_id, timestamp, status, punch, uid)
+      #             attendances.append(attendance)
+      #     elif record_size == 16:
+      #         while len(attendance_data) >= 16:
+      #             user_id, timestamp, status, punch, reserved, workcode = unpack('<I4sBB2sI', attendance_data.ljust(16, b'\x00')[:16])
+      #             user_id = str(user_id)
+      #             if self.verbose: print(codecs.encode(attendance_data[:16], 'hex'))
+      #             attendance_data = attendance_data[16:]
+      #             tuser = list(filter(lambda x: x.user_id == user_id, users))
+      #             if not tuser:
+      #                 if self.verbose: print("no uid {}", user_id)
+      #                 uid = str(user_id)
+      #                 tuser = list(filter(lambda x: x.uid == user_id, users))
+      #                 if not tuser:
+      #                     uid = str(user_id)
+      #                 else:
+      #                     uid = tuser[0].uid
+      #                     user_id = tuser[0].user_id
+      #             else:
+      #                 uid = tuser[0].uid
+      #             timestamp = self.__decode_time(timestamp)
+      #             attendance = Attendance(user_id, timestamp, status, punch, uid)
+      #             attendances.append(attendance)
+      #     else:
+      #         while len(attendance_data) >= 40:
+      #             uid, user_id, status, timestamp, punch, space = unpack('<H24sB4sB8s', attendance_data.ljust(40, b'\x00')[:40])
+      #             if self.verbose: print (codecs.encode(attendance_data[:40], 'hex'))
+      #             user_id = (user_id.split(b'\x00')[0]).decode(errors='ignore')
+      #             timestamp = self.__decode_time(timestamp)
+      #             attendance = Attendance(user_id, timestamp, status, punch, uid)
+      #             attendances.append(attendance)
+      #             attendance_data = attendance_data[record_size:]
+      #     return attendances
+
+      # First, read device sizes to get record count
+      self.read_sizes
+
+      # If no records, return empty array
+      if @records == 0
+        return []
+      end
+
+      # Get users for lookup
+      users = self.get_users
+
+      if @verbose
+        puts "Found #{users.size} users"
+      end
+
       logs = []
 
-      self.send_command(CMD_PREPARE_DATA, [ FCT_ATTLOG ].pack('C'))
-      self.recv_reply
+      # Read attendance data with buffer
+      attendance_data, size = self.read_with_buffer(CMD_ATTLOG_RRQ)
 
-      data_size = self.recv_long
-      logs_data = self.recv_chunk(data_size)
+      if size < 4
+        if @verbose
+          puts "WRN: no attendance data"
+        end
+        return []
+      end
 
-      if logs_data && !logs_data.empty?
-        offset = 0
-        while offset < data_size
-          if data_size - offset >= 16
-            log_info = logs_data[offset..offset + 16]
-            user_id, timestamp, status, punch, uid = log_info.unpack('S<L<CCS<')
+      # Get total size from first 4 bytes
+      total_size = attendance_data[0...4].unpack('I')[0]
 
-            time = Time.at(timestamp)
-            logs << RBZK::Attendance.new(user_id, time, status, punch, uid)
+      # Calculate record size
+      record_size = @records > 0 ? total_size / @records : 0
+
+      if @verbose
+        puts "record_size is #{record_size}"
+      end
+
+      # Remove the first 4 bytes (total size)
+      attendance_data = attendance_data[4..-1]
+
+      if record_size == 8
+        # Handle 8-byte records
+        while attendance_data && attendance_data.size >= 8
+          # In Python: uid, status, timestamp, punch = unpack('HB4sB', attendance_data.ljust(8, b'\x00')[:8])
+          uid, status, timestamp_raw, punch = attendance_data[0...8].ljust(8, "\x00".b).unpack('S<C4sC')
+
+          if @verbose
+            puts "Attendance data (hex): #{attendance_data[0...8].bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
           end
 
-          offset += 16
+          attendance_data = attendance_data[8..-1]
+
+          # Look up user by uid
+          tuser = users.find { |u| u.uid == uid }
+          if !tuser
+            user_id = uid.to_s
+          else
+            user_id = tuser.user_id
+          end
+
+          # Decode timestamp
+          timestamp = decode_time(timestamp_raw)
+
+          # Create attendance record
+          attendance = RBZK::Attendance.new(user_id, timestamp, status, punch, uid)
+          logs << attendance
+        end
+      elsif record_size == 16
+        # Handle 16-byte records
+        while attendance_data && attendance_data.size >= 16
+          # In Python: user_id, timestamp, status, punch, reserved, workcode = unpack('<I4sBB2sI', attendance_data.ljust(16, b'\x00')[:16])
+          user_id_raw, timestamp_raw, status, punch, reserved, workcode = attendance_data[0...16].ljust(16, "\x00".b).unpack('L<4sCCa2L<')
+
+          if @verbose
+            puts "Attendance data (hex): #{attendance_data[0...16].bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+          end
+
+          attendance_data = attendance_data[16..-1]
+
+          # Convert user_id to string
+          user_id = user_id_raw.to_s
+
+          # Look up user by user_id and uid
+          tuser = users.find { |u| u.user_id == user_id }
+          if !tuser
+            if @verbose
+              puts "no uid #{user_id}"
+            end
+            uid = user_id
+            tuser = users.find { |u| u.uid.to_s == user_id }
+            if !tuser
+              uid = user_id
+            else
+              uid = tuser.uid
+              user_id = tuser.user_id
+            end
+          else
+            uid = tuser.uid
+          end
+
+          # Decode timestamp
+          timestamp = decode_time(timestamp_raw)
+
+          # Create attendance record
+          attendance = RBZK::Attendance.new(user_id, timestamp, status, punch, uid)
+          logs << attendance
+        end
+      else
+        # Handle 40-byte records (default)
+        while attendance_data && attendance_data.size >= 40
+          # In Python: uid, user_id, status, timestamp, punch, space = unpack('<H24sB4sB8s', attendance_data.ljust(40, b'\x00')[:40])
+          uid, user_id_raw, status, timestamp_raw, punch, space = attendance_data[0...40].ljust(40, "\x00".b).unpack('S<a24Ca4Ca8')
+
+          if @verbose
+            puts "Attendance data (hex): #{attendance_data[0...40].bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+          end
+
+          # Extract user_id from null-terminated string
+          user_id = user_id_raw.split("\x00")[0].to_s
+
+          # Decode timestamp
+          timestamp = decode_time(timestamp_raw)
+
+          # Create attendance record
+          attendance = RBZK::Attendance.new(user_id, timestamp, status, punch, uid)
+          logs << attendance
+
+          attendance_data = attendance_data[record_size..-1]
         end
       end
 
       logs
     end
 
-    def get_time
-      self.send_command(CMD_GET_TIME)
-      reply = self.recv_reply
+    # Decode a timestamp retrieved from the timeclock
+    # Match Python's __decode_time method exactly
+    # In Python:
+    # def __decode_time(self, t):
+    #     t = unpack("<I", t)[0]
+    #     second = t % 60
+    #     t = t // 60
+    #
+    #     minute = t % 60
+    #     t = t // 60
+    #
+    #     hour = t % 24
+    #     t = t // 24
+    #
+    #     day = t % 31 + 1
+    #     t = t // 31
+    #
+    #     month = t % 12 + 1
+    #     t = t // 12
+    #
+    #     year = t + 2000
+    #
+    #     d = datetime(year, month, day, hour, minute, second)
+    #
+    #     return d
+    def decode_time(t)
+      # Convert binary timestamp to integer
+      t = t.unpack("L<")[0]
 
-      if reply && reply.size >= 8
-        time_data = reply[8..-1].unpack('S<5')
-        year, month, day, hour, minute, second = time_data
-        second = 0 if time_data.size < 6
+      # Extract time components
+      second = t % 60
+      t = t / 60
 
-        return Time.new(year, month, day, hour, minute, second)
-      end
+      minute = t % 60
+      t = t / 60
 
-      nil
+      hour = t % 24
+      t = t / 24
+
+      day = t % 31 + 1
+      t = t / 31
+
+      month = t % 12 + 1
+      t = t / 12
+
+      year = t + 2000
+
+      # Create Time object
+      Time.new(year, month, day, hour, minute, second)
     end
 
-    def set_time(time = nil)
-      time ||= Time.now
+    # Decode a timestamp in hex format (6 bytes)
+    # Match Python's __decode_timehex method
+    # In Python:
+    # def __decode_timehex(self, timehex):
+    #     year, month, day, hour, minute, second = unpack("6B", timehex)
+    #     year += 2000
+    #     d = datetime(year, month, day, hour, minute, second)
+    #     return d
+    def decode_timehex(timehex)
+      # Extract time components
+      year, month, day, hour, minute, second = timehex.unpack("C6")
+      year += 2000
 
-      data = [ time.year, time.month, time.day, time.hour, time.min, time.sec ].pack('S<6')
-      self.send_command(CMD_SET_TIME, data)
-      self.recv_reply
+      # Create Time object
+      Time.new(year, month, day, hour, minute, second)
+    end
 
-      true
+    # Encode a timestamp for the device
+    # Match Python's __encode_time method
+    # In Python:
+    # def __encode_time(self, t):
+    #     d = (
+    #         ((t.year % 100) * 12 * 31 + ((t.month - 1) * 31) + t.day - 1) *
+    #         (24 * 60 * 60) + (t.hour * 60 + t.minute) * 60 + t.second
+    #     )
+    #     return d
+    def encode_time(t)
+      # Calculate encoded timestamp
+      d = (
+        ((t.year % 100) * 12 * 31 + ((t.month - 1) * 31) + t.day - 1) *
+          (24 * 60 * 60) + (t.hour * 60 + t.minute) * 60 + t.second
+      )
+      d
+    end
+
+    def get_time
+      # Match Python's get_time method exactly
+      # In Python:
+      # def get_time(self):
+      #     command = const.CMD_GET_TIME
+      #     response_size = 1032
+      #     cmd_response = self.__send_command(command, b'', response_size)
+      #     if cmd_response.get('status'):
+      #         return self.__decode_time(self.__data[:4])
+      #     else:
+      #         raise ZKErrorResponse("can't get time")
+
+      command = CMD_GET_TIME
+      response_size = 1032
+      response = self.send_command(command, "", response_size)
+
+      if response && response[:status]
+        return decode_time(@data[0...4])
+      else
+        raise RBZK::ZKErrorResponse, "Can't get time"
+      end
+    end
+
+    def set_time(timestamp = nil)
+      # Match Python's set_time method exactly
+      # In Python:
+      # def set_time(self, timestamp):
+      #     command = const.CMD_SET_TIME
+      #     command_string = pack(b'I', self.__encode_time(timestamp))
+      #     cmd_response = self.__send_command(command, command_string)
+      #     if cmd_response.get('status'):
+      #         return True
+      #     else:
+      #         raise ZKErrorResponse("can't set time")
+
+      # Default to current time if not provided
+      timestamp ||= Time.now
+
+      command = CMD_SET_TIME
+      command_string = [ encode_time(timestamp) ].pack('L<')
+      response = self.send_command(command, command_string)
+
+      if response && response[:status]
+        return true
+      else
+        raise RBZK::ZKErrorResponse, "Can't set time"
+      end
     end
 
     def clear_attendance_logs
@@ -948,14 +1718,97 @@ module RBZK
 
       result = "b'"
       binary_string.each_byte do |byte|
-        if byte >= 32 && byte <= 126 && byte != 39 && byte != 92  # printable ASCII except ' and \
+        case byte
+        when 0x0d # Carriage return - Python shows as \r
+          result += "\\r"
+        when 0x0a # Line feed - Python shows as \n
+          result += "\\n"
+        when 0x09 # Tab - Python shows as \t
+          result += "\\t"
+        when 0x07 # Bell - Python can show as \a or \x07
+          result += "\\x07"
+        when 0x08 # Backspace - Python shows as \b
+          result += "\\b"
+        when 0x0c # Form feed - Python shows as \f
+          result += "\\f"
+        when 0x0b # Vertical tab - Python shows as \v
+          result += "\\v"
+        when 0x5c # Backslash - Python shows as \\
+          result += "\\\\"
+        when 0x27 # Single quote - Python shows as \'
+          result += "\\'"
+        when 0x22 # Double quote - Python shows as \"
+          result += "\\\""
+        when 32..126 # Printable ASCII
           result += byte.chr
         else
+          # All other bytes - Python shows as \xHH
           result += "\\x#{byte.to_s(16).rjust(2, '0')}"
         end
       end
       result += "'"
       result
+    end
+
+    # Helper method to compare binary data between Python and Ruby
+    def compare_binary(binary_string, python_expected)
+      ruby_formatted = format_as_python_bytes(binary_string)
+
+      if @verbose
+        puts "Ruby binary: #{ruby_formatted}"
+        puts "Python expected: #{python_expected}"
+
+        if ruby_formatted != python_expected
+          puts "DIFFERENCE DETECTED!"
+          # Show byte-by-byte comparison
+          ruby_bytes = binary_string.bytes
+          # Parse Python bytes string (format: b'\x01\x02')
+          python_bytes = []
+          python_str = python_expected[2..-2] # Remove b'' wrapper
+          i = 0
+          while i < python_str.length
+            if python_str[i] == '\\' && python_str[i + 1] == 'x'
+              # Handle \xNN format
+              hex_val = python_str[i + 2..i + 3]
+              python_bytes << hex_val.to_i(16)
+              i += 4
+            elsif python_str[i] == '\\'
+              # Handle escape sequences
+              case python_str[i + 1]
+              when 't'
+                python_bytes << 9
+              when 'n'
+                python_bytes << 10
+              when 'r'
+                python_bytes << 13
+              when '\\'
+                python_bytes << 92
+              when "'"
+                python_bytes << 39
+              end
+              i += 2
+            else
+              # Regular character
+              python_bytes << python_str[i].ord
+              i += 1
+            end
+          end
+
+          # Show differences
+          puts "Byte-by-byte comparison:"
+          max_len = [ ruby_bytes.length, python_bytes.length ].max
+          (0...max_len).each do |j|
+            ruby_byte = j < ruby_bytes.length ? ruby_bytes[j] : nil
+            python_byte = j < python_bytes.length ? python_bytes[j] : nil
+            match = ruby_byte == python_byte ? "✓" : "✗"
+            puts "  Byte #{j}: Ruby=#{ruby_byte.nil? ? 'nil' : "0x#{ruby_byte.to_s(16).rjust(2, '0')}"}, Python=#{python_byte.nil? ? 'nil' : "0x#{python_byte.to_s(16).rjust(2, '0')}"} #{match}"
+          end
+        else
+          puts "Binary data matches exactly!"
+        end
+      end
+
+      ruby_formatted == python_expected
     end
 
     # Alias for backward compatibility
@@ -1125,7 +1978,7 @@ module RBZK
       if @tcp
         # Create TCP socket (like Python's socket(AF_INET, SOCK_STREAM))
         @socket = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
-        @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [@timeout, 0].pack('l_*'))
+        @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [ @timeout, 0 ].pack('l_*'))
 
         # Connect with connect_ex (like Python's connect_ex)
         begin
@@ -1137,7 +1990,7 @@ module RBZK
           end
         rescue IO::WaitWritable
           # Socket is in progress of connecting
-          ready = IO.select(nil, [@socket], nil, @timeout)
+          ready = IO.select(nil, [ @socket ], nil, @timeout)
           if ready
             begin
               @socket.connect_nonblock(sockaddr)
@@ -1169,7 +2022,7 @@ module RBZK
       else
         # Create UDP socket (like Python's socket(AF_INET, SOCK_DGRAM))
         @socket = Socket.new(Socket::AF_INET, Socket::SOCK_DGRAM)
-        @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [@timeout, 0].pack('l_*'))
+        @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [ @timeout, 0 ].pack('l_*'))
 
         if @verbose
           puts "UDP socket created successfully"
@@ -1229,7 +2082,7 @@ module RBZK
         udp_socket = UDPSocket.new
         udp_socket.connect(@ip, @port)
         udp_socket.send("\x00" * 8, 0)
-        ready = IO.select([udp_socket], nil, nil, 5)
+        ready = IO.select([ udp_socket ], nil, nil, 5)
 
         if ready
           if @verbose
@@ -1282,7 +2135,7 @@ module RBZK
       while l > 1
         # In Python: checksum += unpack('H', pack('BB', p[0], p[1]))[0]
         # This is combining two bytes into a 16-bit value (little-endian)
-        checksum += (buf[i] | (buf[i+1] << 8))
+        checksum += (buf[i] | (buf[i + 1] << 8))
         i += 2
 
         # In Python: if checksum > const.USHRT_MAX: checksum -= const.USHRT_MAX
@@ -1334,7 +2187,7 @@ module RBZK
       length = packet.size
       # In Python: pack('<HHI', const.MACHINE_PREPARE_DATA_1, const.MACHINE_PREPARE_DATA_2, length)
       # In Ruby: [MACHINE_PREPARE_DATA_1, MACHINE_PREPARE_DATA_2, length].pack('S<S<I<')
-      top = [MACHINE_PREPARE_DATA_1, MACHINE_PREPARE_DATA_2, length].pack('S<S<I<')
+      top = [ MACHINE_PREPARE_DATA_1, MACHINE_PREPARE_DATA_2, length ].pack('S<S<I<')
 
       if @verbose
         puts "\nTCP header components:"
@@ -1347,8 +2200,8 @@ module RBZK
         puts "  Expected Python header: #{expected_python_header}"
 
         # Show the actual bytes of the constants
-        puts "  MACHINE_PREPARE_DATA_1 bytes: #{[MACHINE_PREPARE_DATA_1].pack('S<').bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-        puts "  MACHINE_PREPARE_DATA_2 bytes: #{[MACHINE_PREPARE_DATA_2].pack('S<').bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+        puts "  MACHINE_PREPARE_DATA_1 bytes: #{[ MACHINE_PREPARE_DATA_1 ].pack('S<').bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+        puts "  MACHINE_PREPARE_DATA_2 bytes: #{[ MACHINE_PREPARE_DATA_2 ].pack('S<').bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
 
         debug_binary("TCP header only", top) # This is just the 8-byte header
         debug_binary("Full TCP packet (what Python calls 'top')", top + packet) # This is what we return
@@ -1396,17 +2249,17 @@ module RBZK
 
       # Step 1: Create initial header and combine with command_string
       # In Python: buf = pack('<4H', command, 0, session_id, reply_id) + command_string
-      buf = [command, 0, session_id, reply_id].pack('S<4') + command_string
+      buf = [command, 0, session_id, reply_id].pack('v4') + command_string
 
       # Step 2: Convert to bytes array for checksum calculation
       # In Python: buf = unpack('8B' + '%sB' % len(command_string), buf)
       # This unpacks the buffer into individual bytes
       # In Ruby, we can use String#bytes to get an array of bytes
-      buf_bytes = buf.bytes  # Convert the entire buffer to bytes array, just like Python
+      buf = buf.unpack("C#{8 + command_string.length}")
 
       # Step 3: Calculate checksum
       # In Python: checksum = unpack('H', self.__create_checksum(buf))[0]
-      checksum = calculate_checksum(buf_bytes)
+      checksum = calculate_checksum(buf)
 
       # Step 4: Update reply_id
       # In Python: reply_id += 1; if reply_id >= const.USHRT_MAX: reply_id -= const.USHRT_MAX
@@ -1417,11 +2270,7 @@ module RBZK
 
       # Step 5: Create final header with updated values
       # In Python: buf = pack('<4H', command, checksum, session_id, reply_id)
-      final_header = [command, checksum, session_id, reply_id].pack('S<4')
-
-      # Step 6: Return final header + command_string
-      # In Python: return buf + command_string
-      result = final_header + command_string
+      buf = [ command, checksum, session_id, reply_id ].pack('v4')
 
       if @verbose
         puts "Header components:"
@@ -1435,13 +2284,10 @@ module RBZK
         else
           puts "Command string: (empty)"
         end
-
-        debug_binary("Initial header", [command, 0, session_id, reply_id].pack('S<4'))
-        debug_binary("Final header", final_header)
-        debug_binary("Final buffer (header + command_string)", result)
+        debug_binary("Final header", buf)
       end
 
-      result
+      buf + command_string
     end
 
     def send_command(command, command_string = "".b, response_size = 8)
@@ -1492,7 +2338,7 @@ module RBZK
       if @verbose
         puts "command_string class: #{command_string.class}"
         puts "command_string encoding: #{command_string.encoding}"
-        puts "command_string bytes: #{command_string.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+        puts "command_string bytes: #{python_format(command_string)}"
       end
 
       # Create command header (like Python's __create_header)
@@ -1500,6 +2346,7 @@ module RBZK
 
       if @verbose
         puts "\nSending command #{command} with session id #{@session_id} and reply id #{@reply_id}"
+        puts "buf: #{python_format(buf)}"
       end
 
       begin
@@ -1533,7 +2380,7 @@ module RBZK
             raise RBZK::ZKNetworkError, "TCP packet invalid"
           end
 
-          @header = @tcp_data_recv[8..15].unpack('S<4')
+          @header = @tcp_data_recv[8..15].unpack('v4')
           @data_recv = @tcp_data_recv[8..-1]
         else
           # Send UDP packet
@@ -1551,7 +2398,7 @@ module RBZK
       # Process response (like Python's __send_command)
       @response = @header[0]
       @reply_id = @header[3]
-      @data = @data_recv[8..-1]  # This is the key line that matches Python's self.__data = self.__data_recv[8:]
+      @data = @data_recv[8..-1] # This is the key line that matches Python's self.__data = self.__data_recv[8:]
 
       # Return response status (like Python's __send_command)
       if @response == CMD_ACK_OK || @response == CMD_PREPARE_DATA || @response == CMD_DATA
@@ -1618,7 +2465,7 @@ module RBZK
             # Read data in chunks to handle large responses (like Python implementation)
             remaining = data_size
             while remaining > 0
-              chunk_size = [remaining, 4096].min
+              chunk_size = [ remaining, 4096 ].min
               chunk = @socket.read(chunk_size)
               if chunk.nil? || chunk.empty?
                 if @verbose

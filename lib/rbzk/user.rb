@@ -14,13 +14,16 @@ module RBZK
       @@encoding
     end
 
-    def initialize(uid = 0, user_id = "", name = "", privilege = 0, password = "", group_id = 0, card = 0)
+    # Match Python's User constructor exactly
+    # In Python:
+    # def __init__(self, uid, name, privilege, password='', group_id='', user_id='', card=0):
+    def initialize(uid = 0, name = "", privilege = 0, password = "", group_id = "", user_id = "", card = 0)
       @uid = uid
-      @user_id = user_id
       @name = name
       @privilege = privilege
       @password = password
       @group_id = group_id
+      @user_id = user_id
       @card = card
     end
 
