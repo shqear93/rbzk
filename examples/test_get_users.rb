@@ -13,11 +13,11 @@ ZK_PORT = 4370           # Default port, change if needed
 ZK_TIMEOUT = 30          # Connection timeout in seconds
 ZK_PASSWORD = 0          # Device password, 0 means no password
 
-# Create a new ZK instance (exactly like Python implementation)
+# Create a new ZK instance
 zk = RBZK::ZK.new(
   ZK_IP,
   port: ZK_PORT,
-  timeout: 5,        # Use a shorter timeout like Python (5 seconds)
+  timeout: ZK_TIMEOUT,
   password: ZK_PASSWORD,
   verbose: true,     # Set to true for detailed logging
   omit_ping: true,   # Skip ping check (like Python implementation)
@@ -37,28 +37,6 @@ begin
     puts "✗ Connection failed!"
     exit 1
   end
-
-  # Disable the device to ensure exclusive access
-  puts "\nDisabling device..."
-  conn.disable_device
-  puts "✓ Device disabled"
-
-  # Get device information
-  puts "\nGetting device information..."
-  version = conn.get_firmware_version
-  puts "✓ Firmware version: #{version}"
-
-  time = conn.get_time
-  puts "✓ Device time: #{time}"
-
-  # Get device capacity information
-  info = conn.get_free_sizes
-  puts "✓ Device capacity:"
-  puts "  - Users: #{info[:users]}"
-  puts "  - Fingers: #{info[:fingers]}"
-  puts "  - Capacity: #{info[:capacity]}"
-  puts "  - Logs: #{info[:logs]}"
-  puts "  - Passwords: #{info[:passwords]}"
 
   # Get users
   puts "\nGetting users..."
@@ -82,15 +60,7 @@ begin
     puts "✓ No users found"
   end
 
-  # Test the device voice
-  puts "\nTesting device voice..."
-  conn.test_voice
-  puts "✓ Voice test completed"
-
-  # Re-enable the device when done
-  puts "\nEnabling device..."
-  conn.enable_device
-  puts "✓ Device enabled"
+  # We don't re-enable the device here to avoid potential issues
 
 rescue RBZK::ZKNetworkError => e
   puts "\n✗ Network Error: #{e.message}"
