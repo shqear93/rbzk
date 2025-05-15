@@ -1,7 +1,9 @@
 require 'thor'
 require 'rbzk'
 require 'date'
+require 'rbzk/cli/config'
 
+# Check if terminal-table is available
 begin
   require 'terminal-table'
   HAS_TERMINAL_TABLE = true
@@ -13,6 +15,13 @@ module RBZK
   module CLI
     # Thor-based command-line interface for RBZK
     class Commands < Thor
+      # Load configuration before running any command
+      def initialize(*args)
+        super
+        @config = Config.new
+      end
+      # Default IP address can be provided as an option
+      class_option :ip, type: :string, desc: "Device IP address (default: 192.168.100.201)"
       class_option :port, type: :numeric, default: 4370, desc: "Device port"
       class_option :timeout, type: :numeric, default: 30, desc: "Connection timeout in seconds"
       class_option :password, type: :numeric, default: 0, desc: "Device password"
@@ -21,22 +30,24 @@ module RBZK
       class_option :no_ping, type: :boolean, default: true, desc: "Skip ping check"
       class_option :encoding, type: :string, default: 'UTF-8', desc: "Character encoding"
 
-      desc "info IP", "Get device information"
-      def info(ip)
+      desc "info [IP]", "Get device information"
+      def info(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
           # Get firmware version
           firmware_version = conn.get_firmware_version
-          
+
           # Get device time
           device_time = conn.get_time
-          
+
           # Get device capacity
           conn.read_sizes
-          
+
           # Display information
-          if HAS_TERMINAL_TABLE
+          if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
             # Pretty table output
-            table = Terminal::Table.new do |t|
+            table = ::Terminal::Table.new do |t|
               t.title = "Device Information"
               t << ['IP Address', ip]
               t << ['Port', options[:port]]
@@ -49,7 +60,7 @@ module RBZK
               t << ['Current Fingerprints', conn.fingers]
               t << ['Current Attendance Records', conn.records]
             end
-            
+
             puts table
           else
             # Fallback plain text output
@@ -68,8 +79,10 @@ module RBZK
         end
       end
 
-      desc "users IP", "Get users from the device"
-      def users(ip)
+      desc "users [IP]", "Get users from the device"
+      def users(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
           puts "Getting users..."
           users = conn.get_users
@@ -77,18 +90,56 @@ module RBZK
         end
       end
 
-      desc "logs IP", "Get attendance logs"
+      desc "logs [IP]", "Get attendance logs"
       method_option :today, type: :boolean, desc: "Get only today's logs"
       method_option :yesterday, type: :boolean, desc: "Get only yesterday's logs"
       method_option :week, type: :boolean, desc: "Get this week's logs"
       method_option :month, type: :boolean, desc: "Get this month's logs"
       method_option :start_date, type: :string, desc: "Start date for custom range (YYYY-MM-DD)"
       method_option :end_date, type: :string, desc: "End date for custom range (YYYY-MM-DD)"
-      def logs(ip)
+
+      # Add aliases for common log commands
+      desc "logs-today [IP]", "Get today's attendance logs"
+      map "logs-today" => "logs"
+      def logs_today(ip = nil)
+        invoke :logs, [ip], today: true
+      end
+
+      desc "logs-yesterday [IP]", "Get yesterday's attendance logs"
+      map "logs-yesterday" => "logs"
+      def logs_yesterday(ip = nil)
+        invoke :logs, [ip], yesterday: true
+      end
+
+      desc "logs-week [IP]", "Get this week's attendance logs"
+      map "logs-week" => "logs"
+      def logs_week(ip = nil)
+        invoke :logs, [ip], week: true
+      end
+
+      desc "logs-month [IP]", "Get this month's attendance logs"
+      map "logs-month" => "logs"
+      def logs_month(ip = nil)
+        invoke :logs, [ip], month: true
+      end
+
+      desc "logs-custom [IP] START_DATE END_DATE", "Get logs for a custom date range (YYYY-MM-DD)"
+      def logs_custom(ip = nil, start_date = nil, end_date = nil)
+        if start_date.nil? || end_date.nil?
+          puts "Error: logs-custom requires START_DATE and END_DATE in YYYY-MM-DD format"
+          return
+        end
+        invoke :logs, [ip], start_date: start_date, end_date: end_date
+      end
+
+      desc "logs [IP]", "Get all attendance logs"
+      def logs(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
           puts "Getting attendance logs..."
           logs = conn.get_attendance_logs
-          
+
           # Filter logs based on options
           if options[:today]
             today = Date.today
@@ -121,25 +172,31 @@ module RBZK
           else
             title = "All Attendance Logs"
           end
-          
+
           display_logs(logs, title)
         end
       end
 
-      desc "clear_logs IP", "Clear attendance logs"
-      def clear_logs(ip)
+      desc "clear-logs [IP]", "Clear attendance logs"
+      map "clear-logs" => :clear_logs
+      def clear_logs(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
           puts "WARNING: This will delete all attendance logs from the device."
           return unless yes?("Are you sure you want to continue? (y/N)")
-          
+
           puts "Clearing attendance logs..."
           result = conn.clear_attendance
           puts "✓ Attendance logs cleared successfully!" if result
         end
       end
 
-      desc "test_voice IP", "Test the device voice"
-      def test_voice(ip)
+      desc "test-voice [IP]", "Test the device voice"
+      map "test-voice" => :test_voice
+      def test_voice(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
           puts "Testing device voice..."
           result = conn.test_voice
@@ -147,21 +204,79 @@ module RBZK
         end
       end
 
+      desc "config", "Show current configuration"
+      def config
+        if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
+          table = ::Terminal::Table.new do |t|
+            t.title = "RBZK Configuration"
+            @config.to_h.each do |key, value|
+              t << [key, value]
+            end
+          end
+          puts table
+        else
+          puts "RBZK Configuration:"
+          @config.to_h.each do |key, value|
+            puts "#{key}: #{value}"
+          end
+        end
+      end
+
+      desc "config-set KEY VALUE", "Set a configuration value"
+      def config_set(key, value)
+        # Convert value to appropriate type
+        typed_value = case key
+                      when 'port', 'timeout', 'password'
+                        value.to_i
+                      when 'verbose', 'force_udp', 'no_ping'
+                        value.downcase == 'true'
+                      else
+                        value
+                      end
+
+        @config[key] = typed_value
+        @config.save
+        puts "✓ Configuration updated: #{key} = #{typed_value}"
+      end
+
+      desc "config-reset", "Reset configuration to defaults"
+      def config_reset
+        if yes?("Are you sure you want to reset all configuration to defaults? (y/N)")
+          FileUtils.rm_f(@config.default_config_file)
+          @config = Config.new
+          puts "✓ Configuration reset to defaults"
+        else
+          puts "Operation cancelled"
+        end
+      end
+
       private
 
       def with_connection(ip, options)
-        puts "Connecting to ZKTeco device at #{ip}:#{options[:port]}..."
+        # Merge command-line options with configuration
+        # Command-line options take precedence over configuration
+        connection_options = {
+          port: options[:port] || @config['port'],
+          timeout: options[:timeout] || @config['timeout'],
+          password: options[:password] || @config['password'],
+          verbose: options.key?(:verbose) ? options[:verbose] : @config['verbose'],
+          omit_ping: options.key?(:no_ping) ? options[:no_ping] : @config['no_ping'],
+          force_udp: options.key?(:force_udp) ? options[:force_udp] : @config['force_udp'],
+          encoding: options[:encoding] || @config['encoding']
+        }
+
+        puts "Connecting to ZKTeco device at #{ip}:#{connection_options[:port]}..."
         puts "Please ensure the device is powered on and connected to the network."
 
         zk = RBZK::ZK.new(
           ip,
-          port: options[:port],
-          timeout: options[:timeout],
-          password: options[:password],
-          verbose: options[:verbose],
-          omit_ping: options[:no_ping],
-          force_udp: options[:force_udp],
-          encoding: options[:encoding]
+          port: connection_options[:port],
+          timeout: connection_options[:timeout],
+          password: connection_options[:password],
+          verbose: connection_options[:verbose],
+          omit_ping: connection_options[:omit_ping],
+          force_udp: connection_options[:force_udp],
+          encoding: connection_options[:encoding]
         )
 
         conn = nil
@@ -229,16 +344,16 @@ module RBZK
       def display_logs(logs, title = "Attendance Logs")
         if logs && !logs.empty?
           puts "✓ Found #{logs.size} attendance logs:"
-          
+
           # Create a table for the first 20 logs
           display_logs = logs.first(20)
-          
-          if HAS_TERMINAL_TABLE
+
+          if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
             # Pretty table output
-            table = Terminal::Table.new do |t|
+            table = ::Terminal::Table.new do |t|
               t.title = "#{title} (showing #{display_logs.size} of #{logs.size})"
               t.headings = ['User ID', 'Timestamp', 'Status', 'Punch']
-              
+
               display_logs.each do |log|
                 t << [
                   log.user_id,
@@ -248,46 +363,46 @@ module RBZK
                 ]
               end
             end
-            
+
             puts table
           else
             # Fallback plain text output
             puts "#{title} (showing #{display_logs.size} of #{logs.size}):"
             puts "#{'User ID'.ljust(10)} | #{'Timestamp'.ljust(19)} | #{'Status'.ljust(15)} | Punch"
             puts "-" * 60
-            
+
             display_logs.each do |log|
               puts "#{log.user_id.to_s.ljust(10)} | #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S').ljust(19)} | #{format_status(log.status).ljust(15)} | #{log.punch}"
             end
           end
-          
+
           if logs.size > 20
             puts "... and #{logs.size - 20} more records"
           end
-          
+
           # Show statistics
           today = Date.today
           today_logs = logs.select { |log| log.timestamp.to_date == today }
-          
+
           puts "\nStatistics:"
-          
-          if HAS_TERMINAL_TABLE
-            stats_table = Terminal::Table.new do |t|
+
+          if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
+            stats_table = ::Terminal::Table.new do |t|
               t << ['Total Records', logs.size]
               t << ['Today\'s Records', today_logs.size]
               t << ['Unique Users', logs.map(&:user_id).uniq.size]
-              
+
               if logs.size > 0
                 t << ['Date Range', "#{logs.map(&:timestamp).min.strftime('%Y-%m-%d')} to #{logs.map(&:timestamp).max.strftime('%Y-%m-%d')}"]
               end
             end
-            
+
             puts stats_table
           else
             puts "Total Records: #{logs.size}"
             puts "Today's Records: #{today_logs.size}"
             puts "Unique Users: #{logs.map(&:user_id).uniq.size}"
-            
+
             if logs.size > 0
               puts "Date Range: #{logs.map(&:timestamp).min.strftime('%Y-%m-%d')} to #{logs.map(&:timestamp).max.strftime('%Y-%m-%d')}"
             end
@@ -300,63 +415,63 @@ module RBZK
       def display_users(users)
         if users && !users.empty?
           puts "✓ Found #{users.size} users:"
-          
+
           # Create a table for the users
           display_users = users.first(20)
-          
-          if HAS_TERMINAL_TABLE
+
+          if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
             # Pretty table output
-            table = Terminal::Table.new do |t|
+            table = ::Terminal::Table.new do |t|
               t.title = "Users (showing #{display_users.size} of #{users.size})"
               t.headings = ['UID', 'User ID', 'Name', 'Privilege', 'Password', 'Group ID', 'Card']
-              
+
               display_users.each do |user|
                 t << [
                   user.uid,
                   user.user_id,
                   user.name,
                   format_privilege(user.privilege),
-                  user.password.empty? ? '(none)' : '********',
+                  (user.password.nil? || user.password.empty?) ? '(none)' : '********',
                   user.group_id,
                   user.card.zero? ? '(none)' : user.card.to_s
                 ]
               end
             end
-            
+
             puts table
           else
             # Fallback plain text output
             puts "Users (showing #{display_users.size} of #{users.size}):"
             puts "#{'UID'.ljust(5)} | #{'User ID'.ljust(10)} | #{'Name'.ljust(20)} | #{'Privilege'.ljust(12)} | #{'Password'.ljust(10)} | #{'Group ID'.ljust(10)} | Card"
             puts "-" * 90
-            
+
             display_users.each do |user|
-              puts "#{user.uid.to_s.ljust(5)} | #{user.user_id.to_s.ljust(10)} | #{user.name.to_s.ljust(20)} | #{format_privilege(user.privilege).ljust(12)} | #{(user.password.empty? ? '(none)' : '********').ljust(10)} | #{user.group_id.to_s.ljust(10)} | #{user.card.zero? ? '(none)' : user.card.to_s}"
+              puts "#{user.uid.to_s.ljust(5)} | #{user.user_id.to_s.ljust(10)} | #{user.name.to_s.ljust(20)} | #{format_privilege(user.privilege).ljust(12)} | #{((user.password.nil? || user.password.empty?) ? '(none)' : '********').ljust(10)} | #{user.group_id.to_s.ljust(10)} | #{user.card.zero? ? '(none)' : user.card.to_s}"
             end
           end
-          
+
           if users.size > 20
             puts "... and #{users.size - 20} more users"
           end
-          
+
           # Show statistics
           puts "\nStatistics:"
-          
-          if HAS_TERMINAL_TABLE
-            stats_table = Terminal::Table.new do |t|
+
+          if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
+            stats_table = ::Terminal::Table.new do |t|
               t << ['Total Users', users.size]
               t << ['Admins', users.count { |u| u.privilege >= 2 }]
               t << ['Regular Users', users.count { |u| u.privilege < 2 }]
-              t << ['With Password', users.count { |u| !u.password.empty? }]
+              t << ['With Password', users.count { |u| u.password && !u.password.empty? }]
               t << ['With Card', users.count { |u| u.card != 0 }]
             end
-            
+
             puts stats_table
           else
             puts "Total Users: #{users.size}"
             puts "Admins: #{users.count { |u| u.privilege >= 2 }}"
             puts "Regular Users: #{users.count { |u| u.privilege < 2 }}"
-            puts "With Password: #{users.count { |u| !u.password.empty? }}"
+            puts "With Password: #{users.count { |u| u.password && !u.password.empty? }}"
             puts "With Card: #{users.count { |u| u.card != 0 }}"
           end
         else

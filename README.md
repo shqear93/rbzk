@@ -191,9 +191,161 @@ ensure
 end
 ```
 
-### Complete Example
+## Command Line Interface
 
-See the `examples/complete_example.rb` file for a comprehensive example that demonstrates all the main functionality of the gem.
+RBZK provides a powerful command-line interface for interacting with ZKTeco devices. The CLI is built using Thor, which provides a clean, intuitive interface similar to Git and other modern command-line tools.
+
+### Installation
+
+After installing the gem, you can use the `rbzk` command directly:
+
+```bash
+# Install the gem
+gem install rbzk
+
+# Use the command
+rbzk info 192.168.100.201
+```
+
+If you're using Bundler, you can run the command through `bundle exec`:
+
+```bash
+bundle exec rbzk info 192.168.100.201
+```
+
+### Available Commands
+
+```bash
+# Get help
+rbzk help
+
+# Get help for a specific command
+rbzk help logs
+```
+
+#### Device Information
+
+```bash
+# Get device information
+rbzk info 192.168.100.201 [options]
+```
+
+#### Users
+
+```bash
+# Get users from the device
+rbzk users 192.168.100.201 [options]
+```
+
+#### Attendance Logs
+
+```bash
+# Get all attendance logs
+rbzk logs 192.168.100.201 [options]
+
+# Get today's logs
+rbzk logs 192.168.100.201 --today [options]
+
+# Get yesterday's logs
+rbzk logs 192.168.100.201 --yesterday [options]
+
+# Get this week's logs
+rbzk logs 192.168.100.201 --week [options]
+
+# Get this month's logs
+rbzk logs 192.168.100.201 --month [options]
+
+# Get logs for a custom date range
+rbzk logs 192.168.100.201 --start-date=2023-01-01 --end-date=2023-01-31 [options]
+```
+
+#### Clear Logs
+
+```bash
+# Clear attendance logs (will prompt for confirmation)
+rbzk clear_logs 192.168.100.201 [options]
+```
+
+#### Test Voice
+
+```bash
+# Test the device voice
+rbzk test_voice 192.168.100.201 [options]
+```
+
+### Global Options
+
+These options can be used with any command:
+
+```
+--ip=IP                    # Device IP address (default: from config or 192.168.100.201)
+--port=PORT                # Device port (default: from config or 4370)
+--timeout=SECONDS          # Connection timeout in seconds (default: from config or 30)
+--password=PASSWORD        # Device password (default: from config or 0)
+--verbose                  # Enable verbose output (default: from config or false)
+--force-udp                # Use UDP instead of TCP (default: from config or false)
+--no-ping                  # Skip ping check (default: from config or true)
+--encoding=ENCODING        # Character encoding (default: from config or UTF-8)
+```
+
+### Configuration
+
+RBZK supports persistent configuration through a configuration file. This allows you to set default values for IP address and other options without having to specify them every time.
+
+#### Configuration File Location
+
+The configuration file is stored in one of the following locations (in order of precedence):
+
+1. `$XDG_CONFIG_HOME/rbzk/config.yml` (if `$XDG_CONFIG_HOME` is set)
+2. `$HOME/.config/rbzk/config.yml` (on most systems)
+3. `.rbzk.yml` in the current directory (fallback)
+
+#### Configuration Commands
+
+```bash
+# Show current configuration
+rbzk config
+
+# Set a configuration value
+rbzk config-set ip 192.168.1.201
+rbzk config-set port 4371
+rbzk config-set password 12345
+rbzk config-set verbose true
+
+# Reset configuration to defaults
+rbzk config-reset
+```
+
+When you run commands, the CLI will use values from the configuration file as defaults. Command-line options will override the configuration file values.
+
+### Examples
+
+```bash
+# Get device information
+rbzk info 192.168.100.201
+
+# Get users with custom port and password
+rbzk users 192.168.100.201 --port=4371 --password=12345
+
+# Get today's attendance logs with verbose output
+rbzk logs 192.168.100.201 --today --verbose
+
+# Get logs for a custom date range
+rbzk logs 192.168.100.201 --start-date=2023-01-01 --end-date=2023-01-31
+
+# Test voice with UDP connection
+rbzk test_voice 192.168.100.201 --force-udp
+```
+
+### Pretty Output
+
+The command line interface uses the `terminal-table` gem for prettier output if it's available. To enable this feature, install the gem:
+
+```bash
+gem install terminal-table
+```
+
+If the gem is not available, the CLI will fall back to plain text output.
 
 ## Development
 
