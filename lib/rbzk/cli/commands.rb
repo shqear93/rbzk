@@ -41,9 +41,6 @@ module RBZK
           # Get device time
           device_time = conn.get_time
 
-          # Get device capacity
-          conn.read_sizes
-
           # Display information
           if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
             # Pretty table output
@@ -53,12 +50,6 @@ module RBZK
               t << ['Port', options[:port]]
               t << ['Firmware Version', firmware_version]
               t << ['Device Time', device_time]
-              t << ['User Capacity', conn.users_capacity]
-              t << ['Fingerprint Capacity', conn.fingers_capacity]
-              t << ['Attendance Capacity', conn.records_capacity]
-              t << ['Current Users', conn.users]
-              t << ['Current Fingerprints', conn.fingers]
-              t << ['Current Attendance Records', conn.records]
             end
 
             puts table
@@ -69,12 +60,6 @@ module RBZK
             puts "Port: #{options[:port]}"
             puts "Firmware Version: #{firmware_version}"
             puts "Device Time: #{device_time}"
-            puts "User Capacity: #{conn.users_capacity}"
-            puts "Fingerprint Capacity: #{conn.fingers_capacity}"
-            puts "Attendance Capacity: #{conn.records_capacity}"
-            puts "Current Users: #{conn.users}"
-            puts "Current Fingerprints: #{conn.fingers}"
-            puts "Current Attendance Records: #{conn.records}"
           end
         end
       end
@@ -123,12 +108,10 @@ module RBZK
         invoke :logs, [ip], month: true
       end
 
-      desc "logs-custom [IP] START_DATE END_DATE", "Get logs for a custom date range (YYYY-MM-DD)"
-      def logs_custom(ip = nil, start_date = nil, end_date = nil)
-        if start_date.nil? || end_date.nil?
-          puts "Error: logs-custom requires START_DATE and END_DATE in YYYY-MM-DD format"
-          return
-        end
+      desc "logs-custom START_DATE END_DATE [IP]", "Get logs for a custom date range (YYYY-MM-DD)"
+      def logs_custom(start_date, end_date, ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
         invoke :logs, [ip], start_date: start_date, end_date: end_date
       end
 
