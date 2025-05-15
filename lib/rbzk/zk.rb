@@ -634,8 +634,8 @@ module RBZK
 
       # Get the size from the first 4 bytes
       # In Python: size = unpack('I', self.__data[1:5])[0]
-      # In Ruby, 'I' is an unsigned int (4 bytes), which matches Python's 'I'
-      size = data[1..4].unpack('I')[0]
+      # In Ruby, 'L<' is an unsigned long (4 bytes) in little-endian format, which matches Python's 'I'
+      size = data[1..4].unpack('L<')[0]
 
       if @verbose
         puts "size fill be #{size}"
@@ -750,203 +750,118 @@ module RBZK
 
     # Helper method to receive TCP data
     def receive_tcp_data(data_recv, size)
-      # Match Python's __recieve_tcp_data method exactly
-      # In Python:
-      # def __recieve_tcp_data(self, data_recv, size):
-      #     """receive tcp data"""
-      #     data = data_recv
-      #     if size < 8:
-      #         if len(data) < (8 + size):
-      #             need = (8 + size) - len(data)
-      #             more_data = self.__sock.recv(need)
-      #             data += more_data
-      #         response = unpack('<4H', data[:8])[0]
-      #         if response == const.CMD_DATA:
-      #             resp = data[8:8+size]
-      #             if len(resp) == size:
-      #                 return resp, data[8+size:]
-      #             else:
-      #                 if self.verbose: print ("tcp data length error %s, expected %s" % (len(resp), size))
-      #                 return None, b''
-      #         else:
-      #             if self.verbose: print ("tcp response is not data %s" % response)
-      #             return None, b''
-      #     else:
-      #         if len(data) < (8 + size):
-      #             need = (8 + size) - len(data)
-      #             more_data = self.__sock.recv(need)
-      #             data += more_data
-      #         response = unpack('<4H', data[:8])[0]
-      #         if response == const.CMD_DATA:
-      #             return data[8:8+size], data[8+size:]
-      #         else:
-      #             if self.verbose: print ("tcp response is not data %s" % response)
-      #             return None, b''
+      data = []
+      tcp_length = test_tcp_top(data_recv)
 
-      data = data_recv
+      puts "tcp_length #{tcp_length}, size #{size}" if @verbose
 
-      if size < 8
-        if data.size < (8 + size)
-          need = (8 + size) - data.size
-          more_data = @socket.recv(need)
-          data += more_data
-        end
+      if tcp_length <= 0
+        puts "Incorrect tcp packet" if @verbose
+        return nil, "".b
+      end
 
-        response = data[0...8].unpack('S<S<S<S<')[0]
+      if (tcp_length - 8) < size
+        puts "tcp length too small... retrying" if @verbose
 
+        # Recursive call to handle smaller packet
+        resp, bh = receive_tcp_data(data_recv, tcp_length - 8)
+        data << resp if resp
+        size -= resp.size
+
+        puts "new tcp DATA packet to fill misssing #{size}" if @verbose
+
+        # Get more data to fill missing
+        data_recv = bh + @socket.recv(size + 16)
+
+        puts "new tcp DATA starting with #{data_recv.size} bytes" if @verbose
+
+        # Another recursive call with new data
+        resp, bh = receive_tcp_data(data_recv, size)
+        data << resp
+
+        puts "for misssing #{size} recieved #{resp ? resp.size : 0} with extra #{bh.size}" if @verbose
+
+        return data.join, bh
+      end
+
+      received = data_recv.size
+
+      puts "received #{received}, size #{size}" if @verbose
+
+      # In Python: response = unpack('HHHH', data_recv[8:16])[0]
+      # This unpacks 4 shorts (8 bytes) but only uses the first one
+      response = data_recv[8...16].unpack('S<S<S<S<')[0]
+
+      if received >= (size + 32)
         if response == CMD_DATA
-          resp = data[8...(8 + size)]
+          resp = data_recv[16...(size + 16)]
 
-          if resp.size == size
-            return resp, data[(8 + size)..]
-          else
-            if @verbose
-              puts "tcp data length error #{resp.size}, expected #{size}"
-            end
-            return nil, "".b
-          end
+          puts "resp complete len #{resp.size}" if @verbose
+
+          return resp, data_recv[(size + 16)..]
         else
-          if @verbose
-            puts "tcp response is not data #{response}"
-          end
+          puts "incorrect response!!! #{response}" if @verbose
+
           return nil, "".b
         end
       else
-        if data.size < (8 + size)
-          need = (8 + size) - data.size
-          more_data = @socket.recv(need)
-          data += more_data
-        end
+        puts "try DATA incomplete (actual valid #{received - 16})" if @verbose
 
-        response = data[0...8].unpack('S<S<S<S<')[0]
+        data << data_recv[16...(size + 16)]
+        size -= received - 16
+        broken_header = "".b
 
-        if response == CMD_DATA
-          return data[8...(8 + size)], data[(8 + size)..]
-        else
+        if size < 0
+          broken_header = data_recv[size..]
+
           if @verbose
-            puts "tcp response is not data #{response}"
+            puts "broken: #{broken_header.bytes.map { |b| format('%02x', b) }.join}"
           end
-          return nil, "".b
         end
+
+        if size > 0
+          data_recv = receive_raw_data(size)
+          data << data_recv
+        end
+
+        [ data.join, broken_header ]
       end
     end
 
     # Helper method to receive a chunk (like Python's __recieve_chunk)
     def receive_chunk
-      # Match Python's __recieve_chunk method exactly
-      # In Python:
-      # def __recieve_chunk(self):
-      #     """ recieve a chunk """
-      #     if self.__response == const.CMD_DATA:
-      #         if self.tcp:
-      #             if self.verbose: print ("_rc_DATA! is {} bytes, tcp length is {}".format(len(self.__data), self.__tcp_length))
-      #             if len(self.__data) < (self.__tcp_length - 8):
-      #                 need = (self.__tcp_length - 8) - len(self.__data)
-      #                 if self.verbose: print ("need more data: {}".format(need))
-      #                 more_data = self.__recieve_raw_data(need)
-      #                 return b''.join([self.__data, more_data])
-      #             else:
-      #                 if self.verbose: print ("Enough data")
-      #                 return self.__data
-      #         else:
-      #             if self.verbose: print ("_rc len is {}".format(len(self.__data)))
-      #             return self.__data
-      #     elif self.__response == const.CMD_PREPARE_DATA:
-      #         data = []
-      #         size = self.__get_data_size()
-      #         if self.verbose: print ("recieve chunk: prepare data size is {}".format(size))
-      #         if self.tcp:
-      #             if len(self.__data) >= (8 + size):
-      #                 data_recv = self.__data[8:]
-      #             else:
-      #                 data_recv = self.__data[8:] + self.__sock.recv(size + 32)
-      #             resp, broken_header = self.__recieve_tcp_data(data_recv, size)
-      #             data.append(resp)
-      #             # get CMD_ACK_OK
-      #             if len(broken_header) < 16:
-      #                 data_recv = broken_header + self.__sock.recv(16)
-      #             else:
-      #                 data_recv = broken_header
-      #             if len(data_recv) < 16:
-      #                 print ("trying to complete broken ACK %s /16" % len(data_recv))
-      #                 if self.verbose: print (data_recv.encode('hex'))
-      #                 data_recv += self.__sock.recv(16 - len(data_recv)) #TODO: CHECK HERE_!
-      #             if not self.__test_tcp_top(data_recv):
-      #                 if self.verbose: print ("invalid chunk tcp ACK OK")
-      #                 return None
-      #             response = unpack('HHHH', data_recv[8:16])[0]
-      #             if response == const.CMD_ACK_OK:
-      #                 if self.verbose: print ("chunk tcp ACK OK!")
-      #                 return b''.join(data)
-      #             if self.verbose: print("bad response %s" % data_recv)
-      #             if self.verbose: print (codecs.encode(data,'hex'))
-      #             return None
-      #
-      #             return resp
-      #         while True:
-      #             data_recv = self.__sock.recv(1024+8)
-      #             response = unpack('<4H', data_recv[:8])[0]
-      #             if self.verbose: print ("# packet response is: {}".format(response))
-      #             if response == const.CMD_DATA:
-      #                 data.append(data_recv[8:])
-      #                 size -= 1024
-      #             elif response == const.CMD_ACK_OK:
-      #                 break
-      #             else:
-      #                 if self.verbose: print ("broken!")
-      #                 break
-      #             if self.verbose: print ("still needs %s" % size)
-      #         return b''.join(data)
-      #     else:
-      #         if self.verbose: print ("invalid response %s" % self.__response)
-      #         return None
-
       if @response == CMD_DATA
         if @tcp
-          if @verbose
-            puts "_rc_DATA! is #{@data.size} bytes, tcp length is #{@tcp_length}"
-          end
+          puts "_rc_DATA! is #{@data.size} bytes, tcp length is #{@tcp_length}" if @verbose
 
           if @data.size < (@tcp_length - 8)
             need = (@tcp_length - 8) - @data.size
-            if @verbose
-              puts "need more data: #{need}"
-            end
+            puts "need more data: #{need}" if @verbose
             more_data = receive_raw_data(need)
             return @data + more_data
           else
-            if @verbose
-              puts "Enough data"
-            end
+            puts "Enough data" if @verbose
             return @data
           end
         else
-          if @verbose
-            puts "_rc len is #{@data.size}"
-          end
+          puts "_rc len is #{@data.size}" if @verbose
           return @data
         end
       elsif @response == CMD_PREPARE_DATA
         data = []
         size = get_data_size
 
-        if @verbose
-          puts "recieve chunk: prepare data size is #{size}"
-        end
+        puts "recieve chunk: prepare data size is #{size}" if @verbose
 
         if @tcp
-          # date
-          # Pyython: b'T\x07\x00\x00\x00\x00\x01\x00'
-          # Ruby:      b'T\x07\x00\x00\x00\x00\x01\x00'
           if @data.size >= (8 + size)
             data_recv = @data[8..]
           else
+            # [80, 80, 130, 125, 92, 7, 0, 0, 221, 5, 142, 172, 0, 0, 4, 0, 80, 7, 0, 0, 1, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 65, 98, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 2, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 65, 110, 97, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 111, 110, 100, 111, 115, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 51, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 116, 97, 0, 111, 115, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 52, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 97, 121, 115, 0, 115, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 53, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 97, 119, 97, 110, 0, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 54, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 74, 101, 110, 97, 110, 0, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 55, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 70, 97, 114, 97, 104, 0, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 56, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 98, 114, 101, 101, 110, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 57, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 101, 101, 100, 0, 110, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 48, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 71, 111, 102, 114, 97, 110, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 49, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 68, 97, 110, 105, 97, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 50, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 109, 105, 97, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 51, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 101, 101, 109, 0, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 52, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 87, 97, 108, 97, 97, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 53, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 97, 110, 101, 101, 109, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 54, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 79, 108, 97, 0, 101, 109, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 55, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 97, 114, 97, 104, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 56, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 111, 110, 100, 111, 115, 72, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 57, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 111, 0, 100, 111, 115, 72, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 52, 53, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 119, 115, 0, 111, 115, 72, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 52, 54, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 109, 97, 114, 97, 0, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 52, 53, 50, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 97, 115, 110, 101, 101, 109, 0, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 48, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 69, 115, 114, 97, 97, 0, 109, 0, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 49, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 114, 97, 106, 0, 109, 0, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 49, 51, 53, 0, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 108, 97, 97, 110, 97, 115, 115, 101, 114, 0, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 50, 0, 53, 0, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 80, 80, 130, 125, 8, 0, 0, 0, 208, 7, 73, 81, 226, 166, 4, 0]
             data_recv = @data[8..] + @socket.recv(size + 32)
           end
 
-          if @verbose
-            puts "data_recv: #{python_format(data_recv)}"
-          end
+          puts "data_recv: #{python_format(data_recv)}" if @verbose
 
           # hault_for_debuggg_DO_NOT_REMOVE
           resp, broken_header = receive_tcp_data(data_recv, size)
@@ -1165,63 +1080,10 @@ module RBZK
     end
 
     def get_users
-      # Match Python's get_users method exactly
-      # In Python:
-      # def get_users(self):
-      #     self.read_sizes()
-      #     if self.users == 0:
-      #         self.next_uid = 1
-      #         self.next_user_id='1'
-      #         return []
-      #     users = []
-      #     max_uid = 0
-      #     userdata, size = self.read_with_buffer(const.CMD_USERTEMP_RRQ, const.FCT_USER)
-      #     if self.verbose: print("user size {} (= {})".format(size, len(userdata)))
-      #     if size <= 4:
-      #         print("WRN: missing user data")
-      #         return []
-      #     total_size = unpack("I",userdata[:4])[0]
-      #     self.user_packet_size = total_size / self.users
-      #     if not self.user_packet_size in [28, 72]:
-      #         if self.verbose: print("WRN packet size would be  %i" % self.user_packet_size)
-      #     userdata = userdata[4:]
-      #     if self.user_packet_size == 28:
-      #         while len(userdata) >= 28:
-      #             uid, privilege, password, name, card, group_id, timezone, user_id = unpack('<HB5s8sIxBhI',userdata.ljust(28, b'\x00')[:28])
-      #             password = (password.split(b'\x00')[0]).decode(self.encoding, errors='ignore')
-      #             name = (name.split(b'\x00')[0]).decode(self.encoding, errors='ignore').strip()
-      #             group_id = str(group_id)
-      #             user_id = str(user_id)
-      #             if uid > max_uid: max_uid = uid
-      #             if not name:
-      #                 name = "NN-%s" % user_id
-      #             user = User(uid, name, privilege, password, group_id, user_id, card)
-      #             users.append(user)
-      #             if self.verbose: print("[6]user:",uid, privilege, password, name, card, group_id, timezone, user_id)
-      #             userdata = userdata[28:]
-      #     else:
-      #         while len(userdata) >= 72:
-      #             uid, privilege, password, name, card, group_id, user_id = unpack('<HB8s24sIx7sx24s', userdata.ljust(72, b'\x00')[:72])
-      #             password = (password.split(b'\x00')[0]).decode(self.encoding, errors='ignore')
-      #             name = (name.split(b'\x00')[0]).decode(self.encoding, errors='ignore').strip()
-      #             group_id = (group_id.split(b'\x00')[0]).decode(self.encoding, errors='ignore').strip()
-      #             user_id = (user_id.split(b'\x00')[0]).decode(self.encoding, errors='ignore')
-      #             if uid > max_uid: max_uid = uid
-      #             if not name:
-      #                 name = "NN-%s" % user_id
-      #             user = User(uid, name, privilege, password, group_id, user_id, card)
-      #             users.append(user)
-      #             userdata = userdata[72:]
-      #     max_uid += 1
-      #     self.next_uid = max_uid
-      #     self.next_user_id = str(max_uid)
-
       # First call read_sizes to get the user count
       self.read_sizes
 
-      if @verbose
-        puts "Device has #{@users} users"
-      end
+      puts "Device has #{@users} users" if @verbose
 
       # If no users, return empty array
       if @users == 0
@@ -1237,14 +1099,11 @@ module RBZK
       # In Python: userdata, size = self.read_with_buffer(const.CMD_USERTEMP_RRQ, const.FCT_USER)
       users_data, size = read_with_buffer(CMD_USERTEMP_RRQ, FCT_USER)
 
-      if @verbose
-        puts "Users data: #{python_format(users_data)}"
-        puts "user size #{size} (= #{users_data.size})"
-      end
+      puts "user size #{size} (= #{users_data.size})" if @verbose
 
       if size <= 4
         puts "WRN: missing user data"
-        return users
+        return []
       end
 
       # Get total size from the first 4 bytes
@@ -1253,10 +1112,14 @@ module RBZK
 
       # Calculate user packet size based on total size and user count
       # In Python: self.user_packet_size = total_size / self.users
-      # In Python 2.x, this would be integer division, but in Python 3.x it's floating-point division
-      # However, the Python code checks if the result is in [28, 72], so it's expecting an integer
-      # Let's hardcode the user packet size to 72 since that's what we're seeing in the Python implementation
-      @user_packet_size = 72
+      # In Python 3, this is floating point division, but we need an integer for the comparison
+      # with [28, 72], so we convert to integer in Ruby
+      @user_packet_size = @users > 0 ? (total_size.to_f / @users).to_i : 0
+
+      # Keep this important log for debugging user packet size issues
+      if @verbose
+        puts "Total size: #{total_size}, Users: #{@users}, User packet size: #{@user_packet_size}"
+      end
 
       if ![ 28, 72 ].include?(@user_packet_size)
         if @verbose
@@ -1271,7 +1134,7 @@ module RBZK
           # In Python: uid, privilege, password, name, card, group_id, timezone, user_id = unpack('<HB5s8sIxBhI',userdata.ljust(28, b'\x00')[:28])
           # In Ruby, we need to match this format exactly:
           # S< - unsigned short (2 bytes) little-endian (H)
-          # B - unsigned char (1 byte) (B)
+          # C - unsigned char (1 byte) (B)
           # a5 - string (5 bytes) (5s)
           # a8 - string (8 bytes) (8s)
           # L< - unsigned long (4 bytes) little-endian (I)
@@ -1280,16 +1143,23 @@ module RBZK
           # s< - signed short (2 bytes) little-endian (h)
           # L< - unsigned long (4 bytes) little-endian (I)
           user_record = users_data[0..27].ljust(28, "\x00".b)
-          uid, privilege, password_raw, name_raw, card, _, group_id, timezone, user_id = user_record.unpack('S<Ba5a8L<xCs<L<')
 
-          # Process strings
-          password = password_raw.to_s.split("\x00")[0].to_s
-          name = name_raw.to_s.split("\x00")[0].to_s.strip
+          # Process 28-byte user record
+
+          # In Python: uid, privilege, password, name, card, group_id, timezone, user_id = unpack('<HB5s8sIxBhI',userdata.ljust(28, b'\x00')[:28])
+          # We need exactly 8 variables to match Python
+          uid, privilege, password_raw, name_raw, card, group_id, timezone, user_id = user_record.unpack('S<Ca5a8L<xCs<L<')
+
+          # Update max_uid (match Python's order - this happens before string processing)
+          max_uid = uid if uid > max_uid
+
+          # Process strings - match Python's decode behavior
+          # In Python: password = (password.split(b'\x00')[0]).decode(self.encoding, errors='ignore')
+          # Ruby equivalent to Python's decode with errors='ignore' is force_encoding + encode with :invalid => :replace
+          password = password_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace)
+          name = name_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace).strip
           group_id = group_id.to_s
           user_id = user_id.to_s
-
-          # Update max_uid
-          max_uid = uid if uid > max_uid
 
           # Set default name if empty
           name = "NN-#{user_id}" if name.empty?
@@ -1311,23 +1181,32 @@ module RBZK
           # In Python: uid, privilege, password, name, card, group_id, user_id = unpack('<HB8s24sIx7sx24s', userdata.ljust(72, b'\x00')[:72])
           # In Ruby, we need to match this format exactly:
           # S< - unsigned short (2 bytes) little-endian (H)
-          # B - unsigned char (1 byte) (B)
+          # C - unsigned char (1 byte) (B)
           # a8 - string (8 bytes) (8s)
           # a24 - string (24 bytes) (24s)
           # L< - unsigned long (4 bytes) little-endian (I)
-          # x7 - skip 7 bytes (x7s)
-          # a24 - string (24 bytes) (x24s)
+          # x - skip 1 byte (x)
+          # a7 - string (7 bytes) (7s)
+          # x - skip 1 byte (x)
+          # a24 - string (24 bytes) (24s)
           user_record = users_data[0..71].ljust(72, "\x00".b)
-          uid, privilege, password_raw, name_raw, card, _, group_id_raw, user_id_raw = user_record.unpack('S<Ba8a24L<xa7a24')
 
-          # Process strings
-          password = password_raw.to_s.split("\x00")[0].to_s
-          name = name_raw.to_s.split("\x00")[0].to_s.strip
-          group_id = group_id_raw.to_s.split("\x00")[0].to_s.strip
-          user_id = user_id_raw.to_s.split("\x00")[0].to_s
+          # Process 72-byte user record
 
-          # Update max_uid
+          # In Python: uid, privilege, password, name, card, group_id, user_id = unpack('<HB8s24sIx7sx24s', userdata.ljust(72, b'\x00')[:72])
+          # We need exactly 7 variables to match Python
+          uid, privilege, password_raw, name_raw, card, group_id_raw, user_id_raw = user_record.unpack('S<Ca8a24L<xa7xa24')
+
+          # Update max_uid (match Python's order - this happens before string processing)
           max_uid = uid if uid > max_uid
+
+          # Process strings - match Python's decode behavior
+          # In Python: password = (password.split(b'\x00')[0]).decode(self.encoding, errors='ignore')
+          # Ruby equivalent to Python's decode with errors='ignore' is force_encoding + encode with :invalid => :replace
+          password = password_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace)
+          name = name_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace).strip
+          group_id = group_id_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace).strip
+          user_id = user_id_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace)
 
           # Set default name if empty
           name = "NN-#{user_id}" if name.empty?
@@ -2036,23 +1915,23 @@ module RBZK
     end
 
     def test_tcp_top(packet)
-      # Match Python's __test_tcp_top method exactly
-      # In Python: if len(packet)<=8: return 0
+      # If packet is nil or too small, return 0
       return 0 if packet.nil? || packet.size <= 8
 
       # Ensure packet is a binary string
-      packet = packet.to_s.b
+      #packet = packet.to_s.b
 
-      # In Python: tcp_header = unpack('<HHI', packet[:8])
-      # In Ruby: tcp_header = packet[0..7].unpack('S<S<I<')
-      tcp_header = packet[0..7].unpack('S<S<I<')
+      # Unpack the TCP header - equivalent to Python's unpack('<HHI', packet[:8])
+      # S< - unsigned short (2 bytes) little-endian - matches Python's H
+      # L< - unsigned long (4 bytes) little-endian - matches Python's I
+      tcp_header = packet[0...8].unpack('S<S<L<')
 
-      # In Python: if tcp_header[0] == const.MACHINE_PREPARE_DATA_1 and tcp_header[1] == const.MACHINE_PREPARE_DATA_2: return tcp_header[2]
+      # Check if the header matches the expected values
       if tcp_header[0] == MACHINE_PREPARE_DATA_1 && tcp_header[1] == MACHINE_PREPARE_DATA_2
-        return tcp_header[2]
+        return tcp_header[2]  # Return the size (3rd element)
       end
 
-      # In Python: return 0
+      # Default return 0
       return 0
     end
 
