@@ -1080,7 +1080,7 @@ module RBZK
     end
 
     def get_users
-      # First call read_sizes to get the user count
+      # Read sizes
       self.read_sizes
 
       puts "Device has #{@users} users" if @verbose
@@ -1094,147 +1094,56 @@ module RBZK
 
       users = []
       max_uid = 0
-
-      # Get user data using read_with_buffer
-      # In Python: userdata, size = self.read_with_buffer(const.CMD_USERTEMP_RRQ, const.FCT_USER)
-      users_data, size = read_with_buffer(CMD_USERTEMP_RRQ, FCT_USER)
-
-      puts "user size #{size} (= #{users_data.size})" if @verbose
+      userdata, size = self.read_with_buffer(CMD_USERTEMP_RRQ, FCT_USER)
+      puts "user size #{size} (= #{userdata.length})" if @verbose
 
       if size <= 4
         puts "WRN: missing user data"
         return []
       end
 
-      # Get total size from the first 4 bytes
-      # In Python: total_size = unpack("I",userdata[:4])[0]
-      total_size = users_data[0..3].unpack('L<')[0]
-
-      # Calculate user packet size based on total size and user count
-      # In Python: self.user_packet_size = total_size / self.users
-      # In Python 3, this is floating point division, but we need an integer for the comparison
-      # with [28, 72], so we convert to integer in Ruby
-      @user_packet_size = @users > 0 ? (total_size.to_f / @users).to_i : 0
-
-      # Keep this important log for debugging user packet size issues
-      if @verbose
-        puts "Total size: #{total_size}, Users: #{@users}, User packet size: #{@user_packet_size}"
-      end
+      total_size = userdata[0, 4].unpack1('L<')
+      @user_packet_size = total_size / @users
 
       if ![ 28, 72 ].include?(@user_packet_size)
-        if @verbose
-          puts "WRN packet size would be #{@user_packet_size}"
-        end
+        puts "WRN packet size would be #{@user_packet_size}" if @verbose
       end
 
-      users_data = users_data[4..-1]
+      userdata = userdata[4..-1]
 
       if @user_packet_size == 28
-        while users_data && users_data.size >= 28
-          # In Python: uid, privilege, password, name, card, group_id, timezone, user_id = unpack('<HB5s8sIxBhI',userdata.ljust(28, b'\x00')[:28])
-          # In Ruby, we need to match this format exactly:
-          # S< - unsigned short (2 bytes) little-endian (H)
-          # C - unsigned char (1 byte) (B)
-          # a5 - string (5 bytes) (5s)
-          # a8 - string (8 bytes) (8s)
-          # L< - unsigned long (4 bytes) little-endian (I)
-          # x - skip 1 byte (x)
-          # C - unsigned char (1 byte) (B)
-          # s< - signed short (2 bytes) little-endian (h)
-          # L< - unsigned long (4 bytes) little-endian (I)
-          user_record = users_data[0..27].ljust(28, "\x00".b)
-
-          # Process 28-byte user record
-
-          # In Python: uid, privilege, password, name, card, group_id, timezone, user_id = unpack('<HB5s8sIxBhI',userdata.ljust(28, b'\x00')[:28])
-          # We need exactly 8 variables to match Python
-          uid, privilege, password_raw, name_raw, card, group_id, timezone, user_id = user_record.unpack('S<Ca5a8L<xCs<L<')
-
-          # Update max_uid (match Python's order - this happens before string processing)
+        while userdata.length >= 28
+          uid, privilege, password, name, card, group_id, timezone, user_id = userdata.ljust(28, "\x00")[0, 28].unpack('S<Ca5a8L<xCs<L<')
           max_uid = uid if uid > max_uid
-
-          # Process strings - match Python's decode behavior
-          # In Python: password = (password.split(b'\x00')[0]).decode(self.encoding, errors='ignore')
-          # Ruby equivalent to Python's decode with errors='ignore' is force_encoding + encode with :invalid => :replace
-          password = password_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace)
-          name = name_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace).strip
+          password = password.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)
+          name = name.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)&.strip
           group_id = group_id.to_s
           user_id = user_id.to_s
-
-          # Set default name if empty
-          name = "NN-#{user_id}" if name.empty?
-
-          # Create user object
-          # In Python: user = User(uid, name, privilege, password, group_id, user_id, card)
-          user = RBZK::User.new(uid, name, privilege, password, group_id, user_id, card)
+          name = "NN-#{user_id}" if !name
+          user = User.new(uid, name, privilege, password, group_id, user_id, card)
           users << user
-
-          if @verbose
-            puts "[6]user: #{uid} #{privilege} #{password} #{name} #{card} #{group_id} #{timezone} #{user_id}"
-          end
-
-          # Move to next user record
-          users_data = users_data[28..-1]
+          puts "[6]user: #{uid}, #{privilege}, #{password}, #{name}, #{card}, #{group_id}, #{timezone}, #{user_id}" if @verbose
+          userdata = userdata[28..-1]
         end
       else
-        while users_data && users_data.size >= 72
-          # In Python: uid, privilege, password, name, card, group_id, user_id = unpack('<HB8s24sIx7sx24s', userdata.ljust(72, b'\x00')[:72])
-          # In Ruby, we need to match this format exactly:
-          # S< - unsigned short (2 bytes) little-endian (H)
-          # C - unsigned char (1 byte) (B)
-          # a8 - string (8 bytes) (8s)
-          # a24 - string (24 bytes) (24s)
-          # L< - unsigned long (4 bytes) little-endian (I)
-          # x - skip 1 byte (x)
-          # a7 - string (7 bytes) (7s)
-          # x - skip 1 byte (x)
-          # a24 - string (24 bytes) (24s)
-          user_record = users_data[0..71].ljust(72, "\x00".b)
-
-          # Process 72-byte user record
-
-          # In Python: uid, privilege, password, name, card, group_id, user_id = unpack('<HB8s24sIx7sx24s', userdata.ljust(72, b'\x00')[:72])
-          # We need exactly 7 variables to match Python
-          uid, privilege, password_raw, name_raw, card, group_id_raw, user_id_raw = user_record.unpack('S<Ca8a24L<xa7xa24')
-
-          # Update max_uid (match Python's order - this happens before string processing)
+        while userdata.length >= 72
+          uid, privilege, password, name, card, group_id, user_id = userdata.ljust(72, "\x00")[0, 72].unpack('S<Ca8a24L<xa7xa24')
           max_uid = uid if uid > max_uid
-
-          # Process strings - match Python's decode behavior
-          # In Python: password = (password.split(b'\x00')[0]).decode(self.encoding, errors='ignore')
-          # Ruby equivalent to Python's decode with errors='ignore' is force_encoding + encode with :invalid => :replace
-          password = password_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace)
-          name = name_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace).strip
-          group_id = group_id_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace).strip
-          user_id = user_id_raw.to_s.split("\x00")[0].to_s.force_encoding(@encoding).encode('UTF-8', :invalid => :replace, :undef => :replace)
-
-          # Set default name if empty
-          name = "NN-#{user_id}" if name.empty?
-
-          # Create user object
-          # In Python: user = User(uid, name, privilege, password, group_id, user_id, card)
-          user = RBZK::User.new(uid, name, privilege, password, group_id, user_id, card)
+          password = password.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)
+          name = name.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)&.strip
+          group_id = group_id.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)&.strip
+          user_id = user_id.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)
+          name = "NN-#{user_id}" if !name
+          user = User.new(uid, name, privilege, password, group_id, user_id, card)
           users << user
-
-          # Move to next user record
-          users_data = users_data[72..-1]
+          userdata = userdata[72..-1]
         end
       end
 
-      # Update next_uid
       max_uid += 1
       @next_uid = max_uid
       @next_user_id = max_uid.to_s
 
-      # In Python:
-      # while True:
-      #     if any(u for u in users if u.user_id == self.next_user_id):
-      #         max_uid += 1
-      #         self.next_user_id = str(max_uid)
-      #     else:
-      #         break
-
-      # Check for unique user IDs
       loop do
         if users.any? { |u| u.user_id == @next_user_id }
           max_uid += 1
@@ -1919,7 +1828,7 @@ module RBZK
       return 0 if packet.nil? || packet.size <= 8
 
       # Ensure packet is a binary string
-      #packet = packet.to_s.b
+      # packet = packet.to_s.b
 
       # Unpack the TCP header - equivalent to Python's unpack('<HHI', packet[:8])
       # S< - unsigned short (2 bytes) little-endian - matches Python's H
@@ -1928,7 +1837,7 @@ module RBZK
 
       # Check if the header matches the expected values
       if tcp_header[0] == MACHINE_PREPARE_DATA_1 && tcp_header[1] == MACHINE_PREPARE_DATA_2
-        return tcp_header[2]  # Return the size (3rd element)
+        return tcp_header[2] # Return the size (3rd element)
       end
 
       # Default return 0
@@ -2128,7 +2037,7 @@ module RBZK
 
       # Step 1: Create initial header and combine with command_string
       # In Python: buf = pack('<4H', command, 0, session_id, reply_id) + command_string
-      buf = [command, 0, session_id, reply_id].pack('v4') + command_string
+      buf = [ command, 0, session_id, reply_id ].pack('v4') + command_string
 
       # Step 2: Convert to bytes array for checksum calculation
       # In Python: buf = unpack('8B' + '%sB' % len(command_string), buf)
