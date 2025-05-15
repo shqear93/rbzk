@@ -17,7 +17,9 @@ Gem::Specification.new do |spec|
   spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/master/CHANGELOG.md"
 
   # Specify which files should be added to the gem when it is released.
-  spec.files = Dir.glob(%w[lib/**/*.rb LICENSE.txt README.md CHANGELOG.md])
+  spec.files = Dir.glob(%w[lib/**/*.rb bin/* LICENSE.txt README.md CHANGELOG.md])
+  spec.bindir = "bin"
+  spec.executables = ["rbzk"]
   spec.require_paths = [ "lib" ]
 
   # Runtime dependencies
@@ -27,4 +29,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "bundler", "~> 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.0"
+  spec.add_development_dependency "thor", "~> 1.2"
 end
