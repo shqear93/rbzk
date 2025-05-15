@@ -4,7 +4,7 @@ Gem::Specification.new do |spec|
   spec.name = "rbzk"
   spec.version = "0.1.0"
   spec.authors = [ "Khaled AbuShqear" ]
-  spec.email = [ "khaled.abushqear@careem.com" ]
+  spec.email = [ "qmax93@gmail.com" ]
 
   spec.summary = "Ruby library for ZK biometric devices"
   spec.description = "A Ruby implementation of the ZK protocol for fingerprint and biometric attendance devices"
