@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require 'base64'
 
 RSpec.describe "Binary Compatibility" do
   include BinaryCompatibilityHelpers
