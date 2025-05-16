@@ -35,31 +35,100 @@ module RBZK
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
-          # Get firmware version
+          # Get basic device information
           firmware_version = conn.get_firmware_version
-
-          # Get device time
           device_time = conn.get_time
+
+          # Get additional device information
+          device_info = {}
+          device_info['IP Address'] = ip
+          device_info['Port'] = options[:port]
+          device_info['Firmware Version'] = firmware_version
+          device_info['Device Time'] = device_time
+
+          # Try to get serial number
+          begin
+            device_info['Serial Number'] = conn.get_serialnumber
+          rescue RBZK::ZKErrorResponse => e
+            device_info['Serial Number'] = "(not available)"
+          end
+
+          # Try to get MAC address
+          begin
+            device_info['MAC Address'] = conn.get_mac
+          rescue RBZK::ZKErrorResponse => e
+            device_info['MAC Address'] = "(not available)"
+          end
+
+          # Try to get device name
+          begin
+            device_name = conn.get_device_name
+            device_info['Device Name'] = device_name.empty? ? "(not set)" : device_name
+          rescue RBZK::ZKErrorResponse => e
+            device_info['Device Name'] = "(not available)"
+          end
+
+          # Try to get platform
+          begin
+            device_info['Platform'] = conn.get_platform
+          rescue RBZK::ZKErrorResponse => e
+            device_info['Platform'] = "(not available)"
+          end
+
+          # Try to get fingerprint version
+          begin
+            fp_version = conn.get_fp_version
+            device_info['Fingerprint Version'] = fp_version.to_s
+          rescue RBZK::ZKErrorResponse => e
+            device_info['Fingerprint Version'] = "(not available)"
+          end
+
+          # Try to get face version
+          begin
+            face_version = conn.get_face_version
+            device_info['Face Version'] = face_version ? face_version.to_s : "(not available)"
+          rescue RBZK::ZKErrorResponse => e
+            device_info['Face Version'] = "(not available)"
+          end
+
+          # Try to get device capacity information
+          begin
+            conn.read_sizes
+            device_info['Users'] = "#{conn.instance_variable_get(:@users)} / #{conn.instance_variable_get(:@users_cap)}"
+            device_info['Fingerprints'] = "#{conn.instance_variable_get(:@fingers)} / #{conn.instance_variable_get(:@fingers_cap)}"
+            device_info['Records'] = "#{conn.instance_variable_get(:@records)} / #{conn.instance_variable_get(:@rec_cap)}"
+
+            faces = conn.instance_variable_get(:@faces)
+            faces_cap = conn.instance_variable_get(:@faces_cap)
+            if faces && faces_cap
+              device_info['Faces'] = "#{faces} / #{faces_cap}"
+            end
+
+            cards = conn.instance_variable_get(:@cards)
+            if cards && cards > 0
+              device_info['Cards'] = cards.to_s
+            end
+          rescue RBZK::ZKErrorResponse => e
+            # Ignore capacity information if not available
+          end
 
           # Display information
           if defined?(::Terminal) && defined?(::Terminal::Table) && HAS_TERMINAL_TABLE
             # Pretty table output
             table = ::Terminal::Table.new do |t|
               t.title = "Device Information"
-              t << ['IP Address', ip]
-              t << ['Port', options[:port]]
-              t << ['Firmware Version', firmware_version]
-              t << ['Device Time', device_time]
+              device_info.each do |key, value|
+                t << [key, value]
+              end
             end
 
             puts table
           else
             # Fallback plain text output
             puts "Device Information:"
-            puts "IP Address: #{ip}"
-            puts "Port: #{options[:port]}"
-            puts "Firmware Version: #{firmware_version}"
-            puts "Device Time: #{device_time}"
+            device_info.each do |key, value|
+              puts "#{key}: #{value}"
+            end
           end
         end
       end
