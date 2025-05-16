@@ -48,7 +48,6 @@ module RBZK
     CMD_DOORSTATE_RRQ = 75 # Obtain the door condition
     CMD_WRITE_MIFARE = 76 # Write the Mifare card
     CMD_EMPTY_MIFARE = 78 # Clear the Mifare card
-    CMD_PREPARE_BUFFER = 80 # Prepare buffer for data transfer
     CMD_READFILE_DATA = 81 # Read data from buffer
     CMD_GET_USERTEMP = 88 # Get an specific user template (uid, fid)
     CMD_SAVE_USERTEMPS = 110 # Save user and multiple templates
