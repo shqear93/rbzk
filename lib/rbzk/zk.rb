@@ -14,7 +14,6 @@ module RBZK
     end
 
     def test_ping
-      # Like Python's test_ping
       begin
         system("ping -c 1 -W 5 #{@ip} > /dev/null 2>&1")
         return $?.success?
@@ -24,34 +23,23 @@ module RBZK
     end
 
     def test_tcp
-      # Match Python's test_tcp method exactly
       begin
-        # Create socket like Python's socket(AF_INET, SOCK_STREAM)
         client = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
-
-        # Set timeout like Python's settimeout(10)
         client.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [ 10, 0 ].pack('l_*'))
 
-        # Use connect_ex like Python (returns error code instead of raising exception)
         sockaddr = Socket.pack_sockaddr_in(@port, @ip)
         begin
           client.connect(sockaddr)
-          result = 0 # Success, like Python's connect_ex returns 0 on success
+          result = 0 # Success code
         rescue Errno::EISCONN
-          # Already connected
-          result = 0
+          result = 0 # Already connected
         rescue => e
-          # Connection failed, return error code
-          result = e.errno || 1
+          result = e.errno || 1 # Connection failed
         end
 
-        # Close socket
         client.close
-
-        # Return result code (0 = success, non-zero = error)
         return result
       rescue => e
-        # Something went wrong with socket creation
         return e.errno || 1
       end
     end
@@ -74,13 +62,10 @@ module RBZK
       @verbose = verbose
       @encoding = encoding
 
-      # Set TCP mode based on force_udp (like Python's self.tcp = not force_udp)
       @tcp = !force_udp
-
-      # Socket will be created during connect
       @socket = nil
 
-      # Initialize session variables (like Python)
+      # Initialize session variables
       @session_id = 0
       @reply_id = USHRT_MAX - 1
       @data_recv = nil
@@ -94,7 +79,7 @@ module RBZK
       @fingers = {}
       @tcp_header_size = 8
 
-      # Initialize device info variables (like Python)
+      # Initialize device info variables
       @users = 0
       @fingers = 0
       @records = 0
@@ -118,60 +103,44 @@ module RBZK
       end
     end
 
-    # Remove this method as we now use the helper class
-    # def test_tcp
-    # end
-
     def connect
-      # Match Python's connect method
       return self if @connected
 
-      # Skip ping check if requested (like Python's ommit_ping)
+      # Skip ping check if requested
       if !@omit_ping && !@helper.test_ping
         raise RBZK::ZKNetworkError, "Can't reach device (ping #{@ip})"
       end
 
-      # Test TCP connection (like Python's connect)
+      # Set user packet size if TCP connection is available
       if !@force_udp && @helper.test_tcp == 0
-        # Default user packet size for ZK8
-        @user_packet_size = 72
+        @user_packet_size = 72 # Default for ZK8
       end
 
-      # Create socket (like Python's __create_socket)
       create_socket
 
-      # Reset session variables (like Python's connect)
+      # Reset session variables
       @session_id = 0
       @reply_id = USHRT_MAX - 1
 
-      # Send connect command (like Python's connect)
       if @verbose
         puts "Sending connect command to device"
       end
 
       begin
-        # Send connect command (like Python's connect)
-        # In Python: cmd_response = self.__send_command(const.CMD_CONNECT)
-        # No command string is needed for the connect command
         cmd_response = send_command(CMD_CONNECT)
-
-        # Update session ID from header (like Python's connect)
         @session_id = @header[2]
 
-        # Authenticate if needed (like Python's connect)
+        # Authenticate if needed
         if cmd_response[:code] == CMD_ACK_UNAUTH
           if @verbose
             puts "try auth"
           end
 
-          # Create auth command string (like Python's make_commkey)
           command_string = make_commkey(@password, @session_id)
-
-          # Send auth command
           cmd_response = send_command(CMD_AUTH, command_string)
         end
 
-        # Check response status (like Python's connect)
+        # Check response status
         if cmd_response[:status]
           @connected = true
           return self
@@ -264,20 +233,6 @@ module RBZK
     end
 
     def get_serialnumber
-      # Match Python's get_serialnumber method exactly
-      # In Python:
-      # def get_serialnumber(self):
-      #     command = const.CMD_OPTIONS_RRQ
-      #     command_string = b'~SerialNumber\x00'
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command, command_string, response_size)
-      #     if cmd_response.get('status'):
-      #         serialnumber = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
-      #         serialnumber = serialnumber.replace(b'=', b'')
-      #         return serialnumber.decode() # string?
-      #     else:
-      #         raise ZKErrorResponse("Can't read serial number")
-
       command = CMD_OPTIONS_RRQ
       command_string = "~SerialNumber\x00".b
       response_size = 1024
@@ -294,19 +249,6 @@ module RBZK
     end
 
     def get_mac
-      # Match Python's get_mac method exactly
-      # In Python:
-      # def get_mac(self):
-      #     command = const.CMD_OPTIONS_RRQ
-      #     command_string = b'MAC\x00'
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command, command_string, response_size)
-      #     if cmd_response.get('status'):
-      #         mac = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
-      #         return mac.decode()
-      #     else:
-      #         raise ZKErrorResponse("can't read mac address")
-
       command = CMD_OPTIONS_RRQ
       command_string = "MAC\x00".b
       response_size = 1024
@@ -322,19 +264,6 @@ module RBZK
     end
 
     def get_device_name
-      # Match Python's get_device_name method exactly
-      # In Python:
-      # def get_device_name(self):
-      #     command = const.CMD_OPTIONS_RRQ
-      #     command_string = b'~DeviceName\x00'
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command, command_string, response_size)
-      #     if cmd_response.get('status'):
-      #         device = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
-      #         return device.decode()
-      #     else:
-      #         return ""
-
       command = CMD_OPTIONS_RRQ
       command_string = "~DeviceName\x00".b
       response_size = 1024
@@ -350,19 +279,6 @@ module RBZK
     end
 
     def get_face_version
-      # Match Python's get_face_version method exactly
-      # In Python:
-      # def get_face_version(self):
-      #     command = const.CMD_OPTIONS_RRQ
-      #     command_string = b'ZKFaceVersion\x00'
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command, command_string, response_size)
-      #     if cmd_response.get('status'):
-      #         response = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
-      #         return safe_cast(response, int, 0)  if response else 0
-      #     else:
-      #         return None
-
       command = CMD_OPTIONS_RRQ
       command_string = "ZKFaceVersion\x00".b
       response_size = 1024
@@ -378,20 +294,6 @@ module RBZK
     end
 
     def get_extend_fmt
-      # Match Python's get_extend_fmt method exactly
-      # In Python:
-      # def get_extend_fmt(self):
-      #     command = const.CMD_OPTIONS_RRQ
-      #     command_string = b'~ExtendFmt\x00'
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command, command_string, response_size)
-      #     if cmd_response.get('status'):
-      #         fmt = (self.__data.split(b'=', 1)[-1].split(b'\x00')[0])
-      #         return safe_cast(fmt, int, 0) if fmt else 0
-      #     else:
-      #         self._clear_error(command_string)
-      #         return None
-
       command = CMD_OPTIONS_RRQ
       command_string = "~ExtendFmt\x00".b
       response_size = 1024
@@ -402,27 +304,11 @@ module RBZK
         fmt = @data.split("=", 2)[1]&.split("\x00")[0] || ""
         return fmt.to_i rescue 0
       else
-        # In Python, this would call self._clear_error(command_string)
-        # We don't have that method, so we'll just return nil
         return nil
       end
     end
 
     def get_platform
-      # Match Python's get_platform method exactly
-      # In Python:
-      # def get_platform(self):
-      #     command = const.CMD_OPTIONS_RRQ
-      #     command_string = b'~Platform\x00'
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command, command_string, response_size)
-      #     if cmd_response.get('status'):
-      #         platform = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
-      #         platform = platform.replace(b'=', b'')
-      #         return platform.decode()
-      #     else:
-      #         raise ZKErrorResponse("Can't read platform name")
-
       command = CMD_OPTIONS_RRQ
       command_string = "~Platform\x00".b
       response_size = 1024
@@ -481,17 +367,6 @@ module RBZK
     end
 
     def test_voice(index = 0)
-      # Match Python's test_voice method exactly
-      # In Python:
-      # def test_voice(self, index=0):
-      #     command = const.CMD_TESTVOICE
-      #     command_string = pack("I", index)
-      #     cmd_response = self.__send_command(command, command_string)
-      #     if cmd_response.get('status'):
-      #         return True
-      #     else:
-      #         return False
-
       command_string = [ index ].pack('L<')
       response = self.send_command(CMD_TESTVOICE, command_string)
 
@@ -502,55 +377,8 @@ module RBZK
       end
     end
 
-    # Helper method to read data with buffer, similar to Python's read_with_buffer
+    # Helper method to read data with buffer (ZK6: 1503)
     def read_with_buffer(command, fct = 0, ext = 0)
-      # Match Python's read_with_buffer method exactly
-      # In Python:
-      # def read_with_buffer(self, command, fct=0 ,ext=0):
-      #     """
-      #     Test read info with buffered command (ZK6: 1503)
-      #     """
-      #     if self.tcp:
-      #         MAX_CHUNK = 0xFFc0
-      #     else:
-      #         MAX_CHUNK = 16 * 1024
-      #     command_string = pack('<bhii', 1, command, fct, ext)
-      #     if self.verbose: print ("rwb cs", command_string)
-      #     response_size = 1024
-      #     data = []
-      #     start = 0
-      #     cmd_response = self.__send_command(const._CMD_PREPARE_BUFFER, command_string, response_size)
-      #     if not cmd_response.get('status'):
-      #         raise ZKErrorResponse("RWB Not supported")
-      #     if cmd_response['code'] == const.CMD_DATA:
-      #         if self.tcp:
-      #             if self.verbose: print ("DATA! is {} bytes, tcp length is {}".format(len(self.__data), self.__tcp_length))
-      #             if len(self.__data) < (self.__tcp_length - 8):
-      #                 need = (self.__tcp_length - 8) - len(self.__data)
-      #                 if self.verbose: print ("need more data: {}".format(need))
-      #                 more_data = self.__recieve_raw_data(need)
-      #                 return b''.join([self.__data, more_data]), len(self.__data) + len(more_data)
-      #             else:
-      #                 if self.verbose: print ("Enough data")
-      #                 size = len(self.__data)
-      #                 return self.__data, size
-      #         else:
-      #             size = len(self.__data)
-      #             return self.__data, size
-      #     size = unpack('I', self.__data[1:5])[0]
-      #     if self.verbose: print ("size fill be %i" % size)
-      #     remain = size % MAX_CHUNK
-      #     packets = (size-remain) // MAX_CHUNK # should be size /16k
-      #     if self.verbose: print ("rwb: #{} packets of max {} bytes, and extra {} bytes remain".format(packets, MAX_CHUNK, remain))
-      #     for _wlk in range(packets):
-      #         data.append(self.__read_chunk(start,MAX_CHUNK))
-      #         start += MAX_CHUNK
-      #     if remain:
-      #         data.append(self.__read_chunk(start, remain))
-      #         start += remain
-      #     self.free_data()
-      #     if self.verbose: print ("_read w/chunk %i bytes" % start)
-      #     return b''.join(data), start
 
       if @verbose
         puts "Reading data with buffer: command=#{command}, fct=#{fct}, ext=#{ext}"
@@ -1970,94 +1798,42 @@ module RBZK
     end
 
     def create_tcp_top(packet)
-      # Match Python's __create_tcp_top method exactly
       puts "\n*** DEBUG: create_tcp_top called ***" if @verbose
       length = packet.size
-      # In Python: pack('<HHI', const.MACHINE_PREPARE_DATA_1, const.MACHINE_PREPARE_DATA_2, length)
-      # In Ruby: [MACHINE_PREPARE_DATA_1, MACHINE_PREPARE_DATA_2, length].pack('S<S<I<')
       top = [ MACHINE_PREPARE_DATA_1, MACHINE_PREPARE_DATA_2, length ].pack('S<S<I<')
 
       if @verbose
-        puts "\nTCP header components:"
-        puts "  MACHINE_PREPARE_DATA_1: 0x#{MACHINE_PREPARE_DATA_1.to_s(16)} (#{MACHINE_PREPARE_DATA_1}) - should be 'PP' in ASCII"
-        puts "  MACHINE_PREPARE_DATA_2: 0x#{MACHINE_PREPARE_DATA_2.to_s(16)} (#{MACHINE_PREPARE_DATA_2}) - should be '\\x82\\x7d' in hex"
+        puts "TCP header components:"
+        puts "  MACHINE_PREPARE_DATA_1: 0x#{MACHINE_PREPARE_DATA_1.to_s(16)}"
+        puts "  MACHINE_PREPARE_DATA_2: 0x#{MACHINE_PREPARE_DATA_2.to_s(16)}"
         puts "  packet length: #{length}"
-
-        # Show the expected Python representation
-        expected_python_header = "PP\\x82\\x7d\\x#{(length & 0xFF).to_s(16).rjust(2, '0')}\\x#{((length >> 8) & 0xFF).to_s(16).rjust(2, '0')}\\x#{((length >> 16) & 0xFF).to_s(16).rjust(2, '0')}\\x#{((length >> 24) & 0xFF).to_s(16).rjust(2, '0')}"
-        puts "  Expected Python header: #{expected_python_header}"
-
-        # Show the actual bytes of the constants
-        puts "  MACHINE_PREPARE_DATA_1 bytes: #{[ MACHINE_PREPARE_DATA_1 ].pack('S<').bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-        puts "  MACHINE_PREPARE_DATA_2 bytes: #{[ MACHINE_PREPARE_DATA_2 ].pack('S<').bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-
-        debug_binary("TCP header only", top) # This is just the 8-byte header
-        debug_binary("Full TCP packet (what Python calls 'top')", top + packet) # This is what we return
+        debug_binary("TCP header", top)
+        debug_binary("Full TCP packet", top + packet)
       end
 
-      # Print debug info right before returning
-      if @verbose
-        puts "\n*** FINAL TCP PACKET DEBUG ***"
-        puts "In both Python and Ruby, the variable 'top' is just the TCP header, but the method returns 'top + packet':"
-        puts "TCP header format: b'PP\\x82\\x7d\\x#{(length & 0xFF).to_s(16).rjust(2, '0')}\\x#{((length >> 8) & 0xFF).to_s(16).rjust(2, '0')}\\x#{((length >> 16) & 0xFF).to_s(16).rjust(2, '0')}\\x#{((length >> 24) & 0xFF).to_s(16).rjust(2, '0')}'"
-        puts "Return value format (top + packet): TCP header + command packet"
-        puts "Ruby 'top + packet' format: #{(top + packet).bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-        puts "Hex format: #{(top + packet).bytes.map { |b| "\\x#{b.to_s(16).rjust(2, '0')}" }.join('')}"
-      end
-
-      # Return top + packet (like Python's return top + packet)
-      result = top + packet
-
-      if @verbose
-        puts "\n*** SUPER EXPLICIT DEBUG ***"
-        puts "top bytes: #{top.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-        puts "packet bytes: #{packet.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-        puts "result bytes: #{result.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-        puts "result size: #{result.size} bytes"
-      end
-
-      result
+      top + packet
     end
 
     def create_header(command, command_string = "".b, session_id = 0, reply_id = 0)
-      # Match Python's __create_header method exactly
-      # In Python:
-      # def __create_header(self, command, command_string, session_id, reply_id):
-      #     buf = pack('<4H', command, 0, session_id, reply_id) + command_string
-      #     buf = unpack('8B' + '%sB' % len(command_string), buf)
-      #     checksum = unpack('H', self.__create_checksum(buf))[0]
-      #     reply_id += 1
-      #     if reply_id >= const.USHRT_MAX:
-      #         reply_id -= const.USHRT_MAX
-      #     buf = pack('<4H', command, checksum, session_id, reply_id)
-      #     return buf + command_string
-
       # Ensure command_string is a binary string
       command_string = command_string.to_s.b
 
-      # Step 1: Create initial header and combine with command_string
-      # In Python: buf = pack('<4H', command, 0, session_id, reply_id) + command_string
+      # Create initial header and combine with command_string
       buf = [ command, 0, session_id, reply_id ].pack('v4') + command_string
 
-      # Step 2: Convert to bytes array for checksum calculation
-      # In Python: buf = unpack('8B' + '%sB' % len(command_string), buf)
-      # This unpacks the buffer into individual bytes
-      # In Ruby, we can use String#bytes to get an array of bytes
+      # Convert to bytes array for checksum calculation
       buf = buf.unpack("C#{8 + command_string.length}")
 
-      # Step 3: Calculate checksum
-      # In Python: checksum = unpack('H', self.__create_checksum(buf))[0]
+      # Calculate checksum
       checksum = calculate_checksum(buf)
 
-      # Step 4: Update reply_id
-      # In Python: reply_id += 1; if reply_id >= const.USHRT_MAX: reply_id -= const.USHRT_MAX
+      # Update reply_id
       reply_id += 1
       if reply_id >= USHRT_MAX
         reply_id -= USHRT_MAX
       end
 
-      # Step 5: Create final header with updated values
-      # In Python: buf = pack('<4H', command, checksum, session_id, reply_id)
+      # Create final header with updated values
       buf = [ command, checksum, session_id, reply_id ].pack('v4')
 
       if @verbose

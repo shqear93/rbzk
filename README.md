@@ -204,7 +204,7 @@ After installing the gem, you can use the `rbzk` command directly:
 gem install rbzk
 
 # Use the command
-rbzk info 192.168.100.201
+bin/rbzk info 192.168.100.201
 ```
 
 If you're using Bundler, you can run the command through `bundle exec`:
@@ -217,60 +217,60 @@ bundle exec rbzk info 192.168.100.201
 
 ```bash
 # Get help
-rbzk help
+bin/rbzk help
 
 # Get help for a specific command
-rbzk help logs
+bin/rbzk help logs
 ```
 
 #### Device Information
 
 ```bash
 # Get device information
-rbzk info 192.168.100.201 [options]
+bin/rbzk info 192.168.100.201 [options]
 ```
 
 #### Users
 
 ```bash
 # Get users from the device
-rbzk users 192.168.100.201 [options]
+bin/rbzk users 192.168.100.201 [options]
 ```
 
 #### Attendance Logs
 
 ```bash
 # Get all attendance logs
-rbzk logs 192.168.100.201 [options]
+bin/rbzk logs 192.168.100.201 [options]
 
 # Get today's logs
-rbzk logs 192.168.100.201 --today [options]
+bin/rbzk logs 192.168.100.201 --today [options]
 
 # Get yesterday's logs
-rbzk logs 192.168.100.201 --yesterday [options]
+bin/rbzk logs 192.168.100.201 --yesterday [options]
 
 # Get this week's logs
-rbzk logs 192.168.100.201 --week [options]
+bin/rbzk logs 192.168.100.201 --week [options]
 
 # Get this month's logs
-rbzk logs 192.168.100.201 --month [options]
+bin/rbzk logs 192.168.100.201 --month [options]
 
 # Get logs for a custom date range
-rbzk logs 192.168.100.201 --start-date=2023-01-01 --end-date=2023-01-31 [options]
+bin/rbzk logs 192.168.100.201 --start-date=2023-01-01 --end-date=2023-01-31 [options]
 ```
 
 #### Clear Logs
 
 ```bash
 # Clear attendance logs (will prompt for confirmation)
-rbzk clear_logs 192.168.100.201 [options]
+bin/rbzk clear_logs 192.168.100.201 [options]
 ```
 
 #### Test Voice
 
 ```bash
 # Test the device voice
-rbzk test_voice 192.168.100.201 [options]
+bin/rbzk test_voice 192.168.100.201 [options]
 ```
 
 ### Global Options
@@ -304,16 +304,16 @@ The configuration file is stored in one of the following locations (in order of 
 
 ```bash
 # Show current configuration
-rbzk config
+bin/rbzk config
 
 # Set a configuration value
-rbzk config-set ip 192.168.1.201
-rbzk config-set port 4371
-rbzk config-set password 12345
-rbzk config-set verbose true
+bin/rbzk config-set ip 192.168.1.201
+bin/rbzk config-set port 4371
+bin/rbzk config-set password 12345
+bin/rbzk config-set verbose true
 
 # Reset configuration to defaults
-rbzk config-reset
+bin/rbzk config-reset
 ```
 
 When you run commands, the CLI will use values from the configuration file as defaults. Command-line options will override the configuration file values.
@@ -322,19 +322,19 @@ When you run commands, the CLI will use values from the configuration file as de
 
 ```bash
 # Get device information
-rbzk info 192.168.100.201
+bin/rbzk info 192.168.100.201
 
 # Get users with custom port and password
-rbzk users 192.168.100.201 --port=4371 --password=12345
+bin/rbzk users 192.168.100.201 --port=4371 --password=12345
 
 # Get today's attendance logs with verbose output
-rbzk logs 192.168.100.201 --today --verbose
+bin/rbzk logs 192.168.100.201 --today --verbose
 
 # Get logs for a custom date range
-rbzk logs 192.168.100.201 --start-date=2023-01-01 --end-date=2023-01-31
+bin/rbzk logs 192.168.100.201 --start-date=2023-01-01 --end-date=2023-01-31
 
 # Test voice with UDP connection
-rbzk test_voice 192.168.100.201 --force-udp
+bin/rbzk test_voice 192.168.100.201 --force-udp
 ```
 
 ### Pretty Output
