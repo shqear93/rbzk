@@ -1,5 +1,7 @@
 require "bundler/setup"
 require "rbzk"
+require "rbzk/cli/config"
+require "rbzk/cli/commands"
 
 # Load support files
 Dir[File.join(File.dirname(__FILE__), "support/**/*.rb")].each { |f| require f }
