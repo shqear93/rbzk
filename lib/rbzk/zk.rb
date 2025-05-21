@@ -5,7 +5,7 @@ require 'timeout'
 require 'date'
 
 module RBZK
-  # Helper class for ZK (like Python's ZK_helper)
+  # Helper class for ZK
   class ZKHelper
     def initialize(ip, port = 4370)
       @ip = ip
@@ -49,7 +49,7 @@ module RBZK
     include RBZK::Constants
 
     def initialize(ip, port: 4370, timeout: 60, password: 0, force_udp: false, omit_ping: false, verbose: false, encoding: 'UTF-8')
-      # Match Python's __init__ method
+      # Initialize the ZK device connection
       RBZK::User.encoding = encoding
       @address = [ ip, port ]
 
@@ -190,16 +190,6 @@ module RBZK
     end
 
     def disable_device
-      # Match Python's disable_device method exactly
-      # In Python:
-      # def disable_device(self):
-      #     cmd_response = self.__send_command(const.CMD_DISABLEDEVICE)
-      #     if cmd_response.get('status'):
-      #         self.is_enabled = False
-      #         return True
-      #     else:
-      #         raise ZKErrorResponse("Can't disable device")
-
       cmd_response = self.send_command(CMD_DISABLEDEVICE)
       if cmd_response[:status]
         @is_enabled = false
@@ -210,16 +200,6 @@ module RBZK
     end
 
     def get_firmware_version
-      # Match Python's get_firmware_version method exactly
-      # In Python:
-      # def get_firmware_version(self):
-      #     cmd_response = self.__send_command(const.CMD_GET_VERSION,b'', 1024)
-      #     if cmd_response.get('status'):
-      #         firmware_version = self.__data.split(b'\x00')[0]
-      #         return firmware_version.decode()
-      #     else:
-      #         raise ZKErrorResponse("Can't read frimware version")
-
       command = CMD_GET_VERSION
       response_size = 1024
       response = self.send_command(command, "", response_size)
@@ -325,20 +305,6 @@ module RBZK
     end
 
     def get_fp_version
-      # Match Python's get_fp_version method exactly
-      # In Python:
-      # def get_fp_version(self):
-      #     command = const.CMD_OPTIONS_RRQ
-      #     command_string = b'~ZKFPVersion\x00'
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command, command_string, response_size)
-      #     if cmd_response.get('status'):
-      #         response = self.__data.split(b'=', 1)[-1].split(b'\x00')[0]
-      #         response = response.replace(b'=', b'')
-      #         return safe_cast(response, int, 0) if response else 0
-      #     else:
-      #         raise ZKErrorResponse("can't read fingerprint version")
-
       command = CMD_OPTIONS_RRQ
       command_string = "~ZKFPVersion\x00".b
       response_size = 1024
@@ -387,27 +353,16 @@ module RBZK
       # Set max chunk size based on connection type
       max_chunk = @tcp ? 0xFFc0 : 16 * 1024
 
-      # In Python: command_string = pack('<bhii', 1, command, fct, ext)
-      # Note: In Python, the format '<bhii' means:
-      # < - little endian
-      # b - signed char (1 byte)
-      # h - short (2 bytes)
-      # i - int (4 bytes)
-      # i - int (4 bytes)
-      # In Ruby, we need to use:
-      # c - signed char (1 byte) to match Python's 'b'
-      # s - short (2 bytes)
-      # l - long (4 bytes)
-      # l - long (4 bytes)
-      # with < for little-endian
+      # Pack the command parameters into a binary string
+      # Format: 1 byte signed char, 2 byte short, 4 byte long, 4 byte long
+      # All in little-endian format
       command_string = [ 1, command, fct, ext ].pack('cs<l<l<')
 
       if @verbose
         puts "Command string: #{python_format(command_string)}"
       end
 
-      # In Python: cmd_response = self.__send_command(const._CMD_PREPARE_BUFFER, command_string, response_size)
-      # Note: In Python, const._CMD_PREPARE_BUFFER is 1503
+      # Send the command to prepare the buffer
       response_size = 1024
       data = []
       start = 0
@@ -437,7 +392,7 @@ module RBZK
               puts "need more data: #{need}"
             end
 
-            # In Python: more_data = self.__recieve_raw_data(need)
+            # Receive more data to complete the buffer
             more_data = receive_raw_data(need)
 
             if @verbose
@@ -460,9 +415,7 @@ module RBZK
         end
       end
 
-      # Get the size from the first 4 bytes
-      # In Python: size = unpack('I', self.__data[1:5])[0]
-      # In Ruby, 'L<' is an unsigned long (4 bytes) in little-endian format, which matches Python's 'I'
+      # Get the size from the first 4 bytes (unsigned long, little-endian)
       size = data[1..4].unpack('L<')[0]
 
       if @verbose
@@ -471,8 +424,7 @@ module RBZK
 
       # Calculate chunks
       remain = size % max_chunk
-      # In Python: packets = (size-remain) // MAX_CHUNK # should be size /16k
-      # In Ruby, we need to use integer division to match Python's // operator
+      # Calculate number of full-sized packets (integer division)
       packets = (size - remain).div(max_chunk)
 
       if @verbose
@@ -515,44 +467,12 @@ module RBZK
 
     # Helper method to get data size from the current data
     def get_data_size
-      # Match Python's __get_data_size method exactly
-      # In Python:
-      # def __get_data_size(self):
-      #     """internal function to get data size from the packet"""
-      #     if len(self.__data) >= 4:
-      #         size = unpack('I', self.__data[:4])[0]
-      #         return size
-      #     else:
-      #         return 0
-
       if @data && @data.size >= 4
         size = @data[0...4].unpack('L<')[0]
         size
       else
         0
       end
-    end
-
-    # Helper method to test TCP header
-    def test_tcp_top(data)
-      if !data || data.empty?
-        return false
-      end
-
-      if data.size < 8
-        @tcp_length = 0
-        @response = CMD_TCP_STILL_ALIVE
-        return true
-      end
-
-      top, @session_id, @reply_id, @tcp_length = data[0...8].unpack('S<S<S<L<')
-      @response = top
-
-      if @verbose
-        puts "tcp top is #{@response}, session id is #{@session_id}, reply id is #{@reply_id}, tcp length is #{@tcp_length}"
-      end
-
-      true
     end
 
     # Helper method to receive TCP data
@@ -753,22 +673,6 @@ module RBZK
 
     # Helper method to receive raw data (like Python's __recieve_raw_data)
     def receive_raw_data(size)
-      # Match Python's __recieve_raw_data method exactly
-      # In Python:
-      # def __recieve_raw_data(self, size):
-      #     """ partial data ? """
-      #     data = []
-      #     if self.verbose: print ("expecting {} bytes raw data".format(size))
-      #     while size > 0:
-      #         data_recv = self.__sock.recv(size)
-      #         recieved = len(data_recv)
-      #         if self.verbose: print ("partial recv {}".format(recieved))
-      #         if recieved < 100 and self.verbose: print ("   recv {}".format(codecs.encode(data_recv, 'hex')))
-      #         data.append(data_recv)
-      #         size -= recieved
-      #         if self.verbose: print ("still need {}".format(size))
-      #     return b''.join(data)
-
       data = []
       if @verbose
         puts "expecting #{size} bytes raw data"
@@ -798,21 +702,6 @@ module RBZK
 
     # Helper method to clear buffer (like Python's free_data)
     def free_data
-      # Match Python's free_data method exactly
-      # In Python:
-      # def free_data(self):
-      #     """
-      #     clear buffer
-      #
-      #     :return: bool
-      #     """
-      #     command = const.CMD_FREE_DATA
-      #     cmd_response = self.__send_command(command)
-      #     if cmd_response.get('status'):
-      #         return True
-      #     else:
-      #         raise ZKErrorResponse("can't free data")
-
       command = CMD_FREE_DATA
       response = self.send_command(command)
 
@@ -825,26 +714,6 @@ module RBZK
 
     # Helper method to read a chunk of data
     def read_chunk(start, size)
-      # Match Python's __read_chunk method exactly
-      # In Python:
-      # def __read_chunk(self, start, size):
-      #     """
-      #     read a chunk from buffer
-      #     """
-      #     for _retries in range(3):
-      #         command = const._CMD_READ_BUFFER
-      #         command_string = pack('<ii', start, size)
-      #         if self.tcp:
-      #             response_size = size + 32
-      #         else:
-      #             response_size = 1024 + 8
-      #         cmd_response = self.__send_command(command, command_string, response_size)
-      #         data = self.__recieve_chunk()
-      #         if data is not None:
-      #             return data
-      #     else:
-      #         raise ZKErrorResponse("can't read chunk %i:[%i]" % (start, size))
-
       if @verbose
         puts "Reading chunk: start=#{start}, size=#{size}"
       end
@@ -964,68 +833,6 @@ module RBZK
     end
 
     def get_attendance_logs
-      # Match Python's get_attendance method exactly
-      # In Python:
-      # def get_attendance(self):
-      #     self.read_sizes()
-      #     if self.records == 0:
-      #         return []
-      #     users = self.get_users()
-      #     if self.verbose: print (users)
-      #     attendances = []
-      #     attendance_data, size = self.read_with_buffer(const.CMD_ATTLOG_RRQ)
-      #     if size < 4:
-      #         if self.verbose: print ("WRN: no attendance data")
-      #         return []
-      #     total_size = unpack("I", attendance_data[:4])[0]
-      #     record_size = total_size // self.records
-      #     if self.verbose: print ("record_size is ", record_size)
-      #     attendance_data = attendance_data[4:]
-      #     if record_size == 8:
-      #         while len(attendance_data) >= 8:
-      #             uid, status, timestamp, punch = unpack('HB4sB', attendance_data.ljust(8, b'\x00')[:8])
-      #             if self.verbose: print (codecs.encode(attendance_data[:8], 'hex'))
-      #             attendance_data = attendance_data[8:]
-      #             tuser = list(filter(lambda x: x.uid == uid, users))
-      #             if not tuser:
-      #                 user_id = str(uid)
-      #             else:
-      #                 user_id = tuser[0].user_id
-      #             timestamp = self.__decode_time(timestamp)
-      #             attendance = Attendance(user_id, timestamp, status, punch, uid)
-      #             attendances.append(attendance)
-      #     elif record_size == 16:
-      #         while len(attendance_data) >= 16:
-      #             user_id, timestamp, status, punch, reserved, workcode = unpack('<I4sBB2sI', attendance_data.ljust(16, b'\x00')[:16])
-      #             user_id = str(user_id)
-      #             if self.verbose: print(codecs.encode(attendance_data[:16], 'hex'))
-      #             attendance_data = attendance_data[16:]
-      #             tuser = list(filter(lambda x: x.user_id == user_id, users))
-      #             if not tuser:
-      #                 if self.verbose: print("no uid {}", user_id)
-      #                 uid = str(user_id)
-      #                 tuser = list(filter(lambda x: x.uid == user_id, users))
-      #                 if not tuser:
-      #                     uid = str(user_id)
-      #                 else:
-      #                     uid = tuser[0].uid
-      #                     user_id = tuser[0].user_id
-      #             else:
-      #                 uid = tuser[0].uid
-      #             timestamp = self.__decode_time(timestamp)
-      #             attendance = Attendance(user_id, timestamp, status, punch, uid)
-      #             attendances.append(attendance)
-      #     else:
-      #         while len(attendance_data) >= 40:
-      #             uid, user_id, status, timestamp, punch, space = unpack('<H24sB4sB8s', attendance_data.ljust(40, b'\x00')[:40])
-      #             if self.verbose: print (codecs.encode(attendance_data[:40], 'hex'))
-      #             user_id = (user_id.split(b'\x00')[0]).decode(errors='ignore')
-      #             timestamp = self.__decode_time(timestamp)
-      #             attendance = Attendance(user_id, timestamp, status, punch, uid)
-      #             attendances.append(attendance)
-      #             attendance_data = attendance_data[record_size:]
-      #     return attendances
-
       # First, read device sizes to get record count
       self.read_sizes
 
@@ -1160,31 +967,6 @@ module RBZK
       logs
     end
 
-    # Decode a timestamp retrieved from the timeclock
-    # Match Python's __decode_time method exactly
-    # In Python:
-    # def __decode_time(self, t):
-    #     t = unpack("<I", t)[0]
-    #     second = t % 60
-    #     t = t // 60
-    #
-    #     minute = t % 60
-    #     t = t // 60
-    #
-    #     hour = t % 24
-    #     t = t // 24
-    #
-    #     day = t % 31 + 1
-    #     t = t // 31
-    #
-    #     month = t % 12 + 1
-    #     t = t // 12
-    #
-    #     year = t + 2000
-    #
-    #     d = datetime(year, month, day, hour, minute, second)
-    #
-    #     return d
     def decode_time(t)
       # Convert binary timestamp to integer
       t = t.unpack("L<")[0]
@@ -1213,12 +995,6 @@ module RBZK
 
     # Decode a timestamp in hex format (6 bytes)
     # Match Python's __decode_timehex method
-    # In Python:
-    # def __decode_timehex(self, timehex):
-    #     year, month, day, hour, minute, second = unpack("6B", timehex)
-    #     year += 2000
-    #     d = datetime(year, month, day, hour, minute, second)
-    #     return d
     def decode_timehex(timehex)
       # Extract time components
       year, month, day, hour, minute, second = timehex.unpack("C6")
@@ -1228,15 +1004,6 @@ module RBZK
       Time.new(year, month, day, hour, minute, second)
     end
 
-    # Encode a timestamp for the device
-    # Match Python's __encode_time method
-    # In Python:
-    # def __encode_time(self, t):
-    #     d = (
-    #         ((t.year % 100) * 12 * 31 + ((t.month - 1) * 31) + t.day - 1) *
-    #         (24 * 60 * 60) + (t.hour * 60 + t.minute) * 60 + t.second
-    #     )
-    #     return d
     def encode_time(t)
       # Calculate encoded timestamp
       d = (
@@ -1247,17 +1014,6 @@ module RBZK
     end
 
     def get_time
-      # Match Python's get_time method exactly
-      # In Python:
-      # def get_time(self):
-      #     command = const.CMD_GET_TIME
-      #     response_size = 1032
-      #     cmd_response = self.__send_command(command, b'', response_size)
-      #     if cmd_response.get('status'):
-      #         return self.__decode_time(self.__data[:4])
-      #     else:
-      #         raise ZKErrorResponse("can't get time")
-
       command = CMD_GET_TIME
       response_size = 1032
       response = self.send_command(command, "", response_size)
@@ -1270,17 +1026,6 @@ module RBZK
     end
 
     def set_time(timestamp = nil)
-      # Match Python's set_time method exactly
-      # In Python:
-      # def set_time(self, timestamp):
-      #     command = const.CMD_SET_TIME
-      #     command_string = pack(b'I', self.__encode_time(timestamp))
-      #     cmd_response = self.__send_command(command, command_string)
-      #     if cmd_response.get('status'):
-      #         return True
-      #     else:
-      #         raise ZKErrorResponse("can't set time")
-
       # Default to current time if not provided
       timestamp ||= Time.now
 
@@ -1415,30 +1160,6 @@ module RBZK
     end
 
     def read_sizes
-      # Match Python's read_sizes method exactly
-      # In Python:
-      # def read_sizes(self):
-      #     command = const.CMD_GET_FREE_SIZES
-      #     response_size = 1024
-      #     cmd_response = self.__send_command(command,b'', response_size)
-      #     if cmd_response.get('status'):
-      #         if self.verbose: print(codecs.encode(self.__data,'hex'))
-      #         size = len(self.__data)
-      #         if len(self.__data) >= 80:
-      #             fields = unpack('20i', self.__data[:80])
-      #             self.users = fields[4]
-      #             self.fingers = fields[6]
-      #             self.records = fields[8]
-      #             self.dummy = fields[10] #???
-      #             self.cards = fields[12]
-      #             self.fingers_cap = fields[14]
-      #             self.users_cap = fields[15]
-      #             self.rec_cap = fields[16]
-      #             self.fingers_av = fields[17]
-      #             self.users_av = fields[18]
-      #             self.rec_av = fields[19]
-      #             self.__data = self.__data[80:]
-
       command = CMD_GET_FREE_SIZES
       response_size = 1024
       cmd_response = self.send_command(command, "", response_size)
@@ -1701,26 +1422,6 @@ module RBZK
     end
 
     def calculate_checksum(buf)
-      # Match Python's __create_checksum method exactly
-      # In Python:
-      # def __create_checksum(self, p):
-      #     l = len(p)
-      #     checksum = 0
-      #     while l > 1:
-      #         checksum += unpack('H', pack('BB', p[0], p[1]))[0]
-      #         p = p[2:]
-      #         if checksum > const.USHRT_MAX:
-      #             checksum -= const.USHRT_MAX
-      #         l -= 2
-      #     if l:
-      #         checksum = checksum + p[-1]
-      #     while checksum > const.USHRT_MAX:
-      #         checksum -= const.USHRT_MAX
-      #     checksum = ~checksum
-      #     while checksum < 0:
-      #         checksum += const.USHRT_MAX
-      #     return pack('H', checksum)
-
       # Get the length of the buffer
       l = buf.size
       checksum = 0
@@ -1834,41 +1535,6 @@ module RBZK
     end
 
     def send_command(command, command_string = "".b, response_size = 8)
-      # Match Python's __send_command method exactly
-      # In Python:
-      # def __send_command(self, command, command_string=b'', response_size=8):
-      #     if command not in [const.CMD_CONNECT, const.CMD_AUTH] and not self.is_connect:
-      #         raise ZKErrorConnection("instance are not connected.")
-      #     buf = self.__create_header(command, command_string, self.__session_id, self.__reply_id)
-      #     try:
-      #         if self.tcp:
-      #             top = self.__create_tcp_top(buf)
-      #             self.__sock.send(top)
-      #             self.__tcp_data_recv = self.__sock.recv(response_size + 8)
-      #             self.__tcp_length = self.__test_tcp_top(self.__tcp_data_recv)
-      #             if self.__tcp_length == 0:
-      #                 raise ZKNetworkError("TCP packet invalid")
-      #             self.__header = unpack('<4H', self.__tcp_data_recv[8:16])
-      #             self.__data_recv = self.__tcp_data_recv[8:]
-      #         else:
-      #             self.__sock.sendto(buf, self.__address)
-      #             self.__data_recv = self.__sock.recv(response_size)
-      #             self.__header = unpack('<4H', self.__data_recv[:8])
-      #     except Exception as e:
-      #         raise ZKNetworkError(str(e))
-      #     self.__response = self.__header[0]
-      #     self.__reply_id = self.__header[3]
-      #     self.__data = self.__data_recv[8:]
-      #     if self.__response in [const.CMD_ACK_OK, const.CMD_PREPARE_DATA, const.CMD_DATA]:
-      #         return {
-      #             'status': True,
-      #             'code': self.__response
-      #         }
-      #     return {
-      #         'status': False,
-      #         'code': self.__response
-      #     }
-
       # Check connection status (except for connect and auth commands)
       if command != CMD_CONNECT && command != CMD_AUTH && !@connected
         raise RBZK::ZKErrorConnection, "Instance are not connected."

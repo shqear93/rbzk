@@ -94,6 +94,7 @@ module RBZK
       method_option :month, type: :boolean, desc: "Get this month's logs"
       method_option :start_date, type: :string, desc: "Start date for custom range (YYYY-MM-DD)"
       method_option :end_date, type: :string, desc: "End date for custom range (YYYY-MM-DD)"
+      method_option :limit, type: :numeric, default: 25, desc: "Limit the number of logs displayed (default: 25, use 0 for all)"
 
       # Add aliases for common log commands
       desc "logs-today [IP]", "Get today's attendance logs"
@@ -125,6 +126,52 @@ module RBZK
         invoke :logs, [ ip ], month: true
       end
 
+      desc "logs-all [IP]", "Get all attendance logs without limit"
+
+      def logs_all(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
+
+        with_connection(ip, options) do |conn|
+          # Get attendance logs
+          puts "Getting all attendance logs (this may take a while)..."
+          logs = conn.get_attendance_logs
+          total_logs = logs.size
+          puts "Total logs: #{total_logs}" if options[:verbose]
+
+          # Display logs
+          if logs && !logs.empty?
+            puts "\nFound #{logs.size} attendance records:"
+
+            if defined?(::Terminal) && defined?(::Terminal::Table)
+              # Pretty table output
+              table = ::Terminal::Table.new do |t|
+                t.title = "All Attendance Logs (Showing All Records)"
+                t.headings = [ 'User ID', 'Time', 'Status' ]
+
+                # Show all logs in the table
+                logs.each do |log|
+                  t << [
+                    log.user_id,
+                    log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    format_status(log.status)
+                  ]
+                end
+              end
+
+              puts table
+            else
+              # Fallback plain text output
+              logs.each do |log|
+                puts "  User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}"
+              end
+            end
+          else
+            puts "\nNo attendance records found"
+          end
+        end
+      end
+
       desc "logs-custom START_DATE END_DATE [IP]", "Get logs for a custom date range (YYYY-MM-DD)"
 
       def logs_custom(start_date, end_date, ip = nil)
@@ -146,88 +193,116 @@ module RBZK
           puts "Total logs: #{total_logs}" if options[:verbose]
 
           # Filter logs based on options
-          if options[:today]
-            today = Date.today
-            logs = filter_logs_by_date(logs, today, today)
-            "Today's Attendance Logs (#{today})"
-          elsif options[:yesterday]
-            yesterday = Date.today - 1
-            logs = filter_logs_by_date(logs, yesterday, yesterday)
-            "Yesterday's Attendance Logs (#{yesterday})"
-          elsif options[:week]
-            today = Date.today
-            start_of_week = today - today.wday
-            logs = filter_logs_by_date(logs, start_of_week, today)
-            "This Week's Attendance Logs (#{start_of_week} to #{today})"
-          elsif options[:month]
-            today = Date.today
-            start_of_month = Date.new(today.year, today.month, 1)
-            logs = filter_logs_by_date(logs, start_of_month, today)
-            "This Month's Attendance Logs (#{start_of_month} to #{today})"
-          elsif options[:start_date] && options[:end_date]
-            begin
-              start_date = Date.parse(options[:start_date])
-              end_date = Date.parse(options[:end_date])
+          title = if options[:today]
+                    today = Date.today
+                    logs = filter_logs_by_date(logs, today, today)
+                    "Today's Attendance Logs (#{today})"
+                  elsif options[:yesterday]
+                    yesterday = Date.today - 1
+                    logs = filter_logs_by_date(logs, yesterday, yesterday)
+                    "Yesterday's Attendance Logs (#{yesterday})"
+                  elsif options[:week]
+                    today = Date.today
+                    start_of_week = today - today.wday
+                    logs = filter_logs_by_date(logs, start_of_week, today)
+                    "This Week's Attendance Logs (#{start_of_week} to #{today})"
+                  elsif options[:month]
+                    today = Date.today
+                    start_of_month = Date.new(today.year, today.month, 1)
+                    logs = filter_logs_by_date(logs, start_of_month, today)
+                    "This Month's Attendance Logs (#{start_of_month} to #{today})"
+                  elsif options[:start_date] && options[:end_date]
+                    begin
+                      start_date = Date.parse(options[:start_date])
+                      end_date = Date.parse(options[:end_date])
 
-              # Print debug info
-              puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
+                      # Print debug info
+                      puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
 
-              # Use the filter_logs_by_date method
-              logs = filter_logs_by_date(logs, start_date, end_date)
+                      # Use the filter_logs_by_date method
+                      logs = filter_logs_by_date(logs, start_date, end_date)
 
-              "Attendance Logs (#{start_date} to #{end_date})"
-            rescue ArgumentError
-              puts "Error: Invalid date format. Please use YYYY-MM-DD format."
-              return
-            end
-          elsif options[:start_date]
-            begin
-              start_date = Date.parse(options[:start_date])
-              end_date = Date.today
+                      "Attendance Logs (#{start_date} to #{end_date})"
+                    rescue ArgumentError
+                      puts "Error: Invalid date format. Please use YYYY-MM-DD format."
+                      return
+                    end
+                  elsif options[:start_date]
+                    begin
+                      start_date = Date.parse(options[:start_date])
+                      end_date = Date.today
 
-              # Print debug info
-              puts "Filtering logs from #{start_date} onwards..." if options[:verbose]
+                      # Print debug info
+                      puts "Filtering logs from #{start_date} onwards..." if options[:verbose]
 
-              # Use the filter_logs_by_date method
-              logs = filter_logs_by_date(logs, start_date, end_date)
+                      # Use the filter_logs_by_date method
+                      logs = filter_logs_by_date(logs, start_date, end_date)
 
-              "Attendance Logs (#{start_date} to #{end_date})"
-            rescue ArgumentError
-              puts "Error: Invalid date format. Please use YYYY-MM-DD format."
-              return
-            end
-          elsif options[:end_date]
-            begin
-              end_date = Date.parse(options[:end_date])
-              # Default start date to 30 days before end date
-              start_date = end_date - 30
+                      "Attendance Logs (#{start_date} to #{end_date})"
+                    rescue ArgumentError
+                      puts "Error: Invalid date format. Please use YYYY-MM-DD format."
+                      return
+                    end
+                  elsif options[:end_date]
+                    begin
+                      end_date = Date.parse(options[:end_date])
+                      # Default start date to 30 days before end date
+                      start_date = end_date - 30
 
-              # Print debug info
-              puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
+                      # Print debug info
+                      puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
 
-              # Use the filter_logs_by_date method
-              logs = filter_logs_by_date(logs, start_date, end_date)
+                      # Use the filter_logs_by_date method
+                      logs = filter_logs_by_date(logs, start_date, end_date)
 
-              "Attendance Logs (#{start_date} to #{end_date})"
-            rescue ArgumentError
-              puts "Error: Invalid date format. Please use YYYY-MM-DD format."
-              return
-            end
-          else
-            "All Attendance Logs"
-          end
+                      "Attendance Logs (#{start_date} to #{end_date})"
+                    rescue ArgumentError
+                      puts "Error: Invalid date format. Please use YYYY-MM-DD format."
+                      return
+                    end
+                  else
+                    "All Attendance Logs"
+                  end
 
           # Display logs
           if logs && !logs.empty?
             puts "\nFound #{logs.size} attendance records:"
 
-            # Show the first 10 records in a simpler format like the Python script
-            logs.first(10).each do |log|
-              puts "  User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}"
-            end
+            # Determine how many logs to display
+            limit = options[:limit] || 25
+            display_logs = limit > 0 ? logs.first(limit) : logs
 
-            if logs.size > 10
-              puts "  ... and #{logs.size - 10} more records"
+            if defined?(::Terminal) && defined?(::Terminal::Table)
+              # Pretty table output
+              table = ::Terminal::Table.new do |t|
+                t.title = title || "Attendance Logs"
+                t.headings = [ 'User ID', 'Time', 'Status' ]
+
+                # Show logs in the table based on limit
+                display_logs.each do |log|
+                  t << [
+                    log.user_id,
+                    log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    format_status(log.status)
+                  ]
+                end
+              end
+
+              puts table
+
+              # Show summary if logs were limited
+              if limit > 0 && logs.size > limit
+                puts "Showing #{display_logs.size} of #{logs.size} records. Use --limit option to change the number of records displayed."
+              end
+            else
+              # Fallback plain text output
+              display_logs.each do |log|
+                puts "  User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}"
+              end
+
+              if logs.size > display_logs.size
+                puts "  ... and #{logs.size - display_logs.size} more records"
+              end
             end
           else
             puts "\nNo attendance records found"
