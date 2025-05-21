@@ -2,6 +2,8 @@
 
 A Ruby implementation of the ZK protocol for fingerprint and biometric attendance devices.
 
+This project is inspired by and based on the [pyzk Python library](https://github.com/fananimi/pyzk), adapting its protocol implementation to Ruby while maintaining compatibility with ZKTeco devices.
+
 ## Installation
 
 Add this line to your application's Gemfile:
