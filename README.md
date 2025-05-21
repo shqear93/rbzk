@@ -330,8 +330,15 @@ bin/rbzk users 192.168.100.201 --port=4371 --password=12345
 # Get today's attendance logs with verbose output
 bin/rbzk logs 192.168.100.201 --today --verbose
 
-# Get logs for a custom date range
+# Get logs for a custom date range (two ways)
+bin/rbzk logs-custom 2023-01-01 2023-01-31 192.168.100.201
 bin/rbzk logs 192.168.100.201 --start-date=2023-01-01 --end-date=2023-01-31
+
+# Get logs from a specific date to today
+bin/rbzk logs 192.168.100.201 --start-date=2023-01-01
+
+# Get logs from 30 days before to a specific date
+bin/rbzk logs 192.168.100.201 --end-date=2023-01-31
 
 # Test voice with UDP connection
 bin/rbzk test_voice 192.168.100.201 --force-udp

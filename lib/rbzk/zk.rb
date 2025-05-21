@@ -203,7 +203,7 @@ module RBZK
       cmd_response = self.send_command(CMD_DISABLEDEVICE)
       if cmd_response[:status]
         @is_enabled = false
-        return true
+        true
       else
         raise RBZK::ZKErrorResponse, "Can't disable device"
       end
@@ -226,7 +226,7 @@ module RBZK
 
       if response && response[:status]
         firmware_version = @data.split("\x00")[0]
-        return firmware_version.to_s
+        firmware_version.to_s
       else
         raise RBZK::ZKErrorResponse, "Can't read firmware version"
       end
@@ -242,7 +242,7 @@ module RBZK
       if response && response[:status]
         serialnumber = @data.split("=", 2)[1]&.split("\x00")[0] || ""
         serialnumber = serialnumber.gsub("=", "")
-        return serialnumber.to_s
+        serialnumber.to_s
       else
         raise RBZK::ZKErrorResponse, "Can't read serial number"
       end
@@ -257,7 +257,7 @@ module RBZK
 
       if response && response[:status]
         mac = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        return mac.to_s
+        mac.to_s
       else
         raise RBZK::ZKErrorResponse, "Can't read MAC address"
       end
@@ -272,9 +272,9 @@ module RBZK
 
       if response && response[:status]
         device = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        return device.to_s
+        device.to_s
       else
-        return ""
+        ""
       end
     end
 
@@ -287,9 +287,9 @@ module RBZK
 
       if response && response[:status]
         version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        return version.to_i rescue 0
+        version.to_i rescue 0
       else
-        return nil
+        nil
       end
     end
 
@@ -302,9 +302,9 @@ module RBZK
 
       if response && response[:status]
         fmt = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        return fmt.to_i rescue 0
+        fmt.to_i rescue 0
       else
-        return nil
+        nil
       end
     end
 
@@ -318,7 +318,7 @@ module RBZK
       if response && response[:status]
         platform = @data.split("=", 2)[1]&.split("\x00")[0] || ""
         platform = platform.gsub("=", "")
-        return platform.to_s
+        platform.to_s
       else
         raise RBZK::ZKErrorResponse, "Can't read platform name"
       end
@@ -348,7 +348,7 @@ module RBZK
       if response && response[:status]
         version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
         version = version.gsub("=", "")
-        return version.to_i rescue 0
+        version.to_i rescue 0
       else
         raise RBZK::ZKErrorResponse, "Can't read fingerprint version"
       end
@@ -371,9 +371,9 @@ module RBZK
       response = self.send_command(CMD_TESTVOICE, command_string)
 
       if response && response[:status]
-        return true
+        true
       else
-        return false
+        false
       end
     end
 
@@ -510,7 +510,7 @@ module RBZK
 
       # In Python: return b''.join(data), start
       result = result_data.join
-      return result, start
+      [ result, start ]
     end
 
     # Helper method to get data size from the current data
@@ -527,35 +527,14 @@ module RBZK
 
       if @data && @data.size >= 4
         size = @data[0...4].unpack('L<')[0]
-        return size
+        size
       else
-        return 0
+        0
       end
     end
 
     # Helper method to test TCP header
     def test_tcp_top(data)
-      # Match Python's __test_tcp_top method exactly
-      # In Python:
-      # def __test_tcp_top(self, packet):
-      #     """test a TCP packet header"""
-      #     if not packet:
-      #         return False
-      #     if len(packet) < 8:
-      #         self.__tcp_length = 0
-      #         self.__response = const.CMD_TCP_STILL_ALIVE
-      #         return True
-      #
-      #     if len(packet) < 8:
-      #         self.__tcp_length = 0
-      #         self.__response = const.CMD_TCP_STILL_ALIVE
-      #         return True
-      #     top, self.__session_id, self.__reply_id, self.__tcp_length = unpack('<HHHI', packet[:8])
-      #     self.__response = top
-      #     if self.verbose: print ("tcp top is {}, session id is {}, reply id is {}, tcp length is {}".format(
-      #         self.__response, self.__session_id, self.__reply_id, self.__tcp_length))
-      #     return True
-
       if !data || data.empty?
         return false
       end
@@ -573,7 +552,7 @@ module RBZK
         puts "tcp top is #{@response}, session id is #{@session_id}, reply id is #{@reply_id}, tcp length is #{@tcp_length}"
       end
 
-      return true
+      true
     end
 
     # Helper method to receive TCP data
@@ -768,7 +747,7 @@ module RBZK
         if @verbose
           puts "invalid response #{@response}"
         end
-        return nil
+        nil
       end
     end
 
@@ -838,7 +817,7 @@ module RBZK
       response = self.send_command(command)
 
       if response && response[:status]
-        return true
+        true
       else
         raise RBZK::ZKErrorResponse, "Can't free data"
       end
@@ -1284,7 +1263,7 @@ module RBZK
       response = self.send_command(command, "", response_size)
 
       if response && response[:status]
-        return decode_time(@data[0...4])
+        decode_time(@data[0...4])
       else
         raise RBZK::ZKErrorResponse, "Can't get time"
       end
@@ -1310,7 +1289,7 @@ module RBZK
       response = self.send_command(command, command_string)
 
       if response && response[:status]
-        return true
+        true
       else
         raise RBZK::ZKErrorResponse, "Can't set time"
       end
@@ -1669,7 +1648,7 @@ module RBZK
       end
 
       # Default return 0
-      return 0
+      0
     end
 
     def ping
@@ -1966,12 +1945,12 @@ module RBZK
 
       # Return response status (like Python's __send_command)
       if @response == CMD_ACK_OK || @response == CMD_PREPARE_DATA || @response == CMD_DATA
-        return {
+        {
           status: true,
           code: @response
         }
       else
-        return {
+        {
           status: false,
           code: @response
         }

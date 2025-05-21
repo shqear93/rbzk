@@ -24,11 +24,11 @@ Gem::Specification.new do |spec|
 
   # Runtime dependencies
   spec.add_dependency "bytes", "~> 0.1"
+  spec.add_dependency "thor", "~> 1.2"
+  spec.add_dependency "terminal-table", "~> 3.0"
 
   # Development dependencies
   spec.add_development_dependency "bundler", "~> 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.0"
-  spec.add_development_dependency "thor", "~> 1.2"
-  spec.add_development_dependency "terminal-table", "~> 3.0"
 end
