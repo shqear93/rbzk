@@ -15,8 +15,13 @@ module RBZK
 
     def test_ping
       begin
-        system("ping -c 1 -W 5 #{@ip} > /dev/null 2>&1")
-        return $?.success?
+        Timeout.timeout(5) do
+          s = TCPSocket.new(@ip, @port)
+          s.close
+          return true
+        end
+      rescue Timeout::Error, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SocketError => e
+        return false
       rescue => e
         return false
       end
