@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "lib/rbzk/version"
+
 Gem::Specification.new do |spec|
   spec.name = "rbzk"
-  spec.version = "0.1.2"
+  spec.version = RBZK::VERSION
   spec.authors = [ "Khaled AbuShqear" ]
   spec.email = [ "qmax93@gmail.com" ]
 
