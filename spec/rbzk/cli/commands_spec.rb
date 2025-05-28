@@ -126,4 +126,116 @@ RSpec.describe RBZK::CLI::Commands do
   #     expect { cli.users }.to output(/users/).to_stdout
   #   end
   # end
+
+  describe '#add_user' do
+    let(:conn) { instance_double(RBZK::ZK) }
+
+    before do
+      allow(cli).to receive(:with_connection).and_yield(conn)
+      allow(conn).to receive(:set_user).and_return(true)
+    end
+
+    it 'creates a User object and calls set_user with its attributes' do
+      # Set up command line options
+      allow(cli).to receive(:options).and_return({
+        uid: 42,
+        name: "Test User",
+        privilege: 0,
+        password: "1234",
+        group_id: "Group1",
+        user_id: "EMP123",
+        card: 987654321
+      })
+
+      # Call the method
+      expect { cli.add_user('192.168.100.201') }.to output(/Adding\/updating user/).to_stdout
+
+      # Verify that set_user was called with the correct parameters
+      expect(conn).to have_received(:set_user).with(
+        uid: 42,
+        name: "Test User",
+        privilege: 0,
+        password: "1234",
+        group_id: "Group1",
+        user_id: "EMP123",
+        card: 987654321
+      )
+    end
+
+    it 'handles missing parameters by using default values' do
+      # Set up command line options with minimal parameters
+      allow(cli).to receive(:options).and_return({
+        name: "Minimal User"
+      })
+
+      # Call the method
+      expect { cli.add_user('192.168.100.201') }.to output(/Adding\/updating user/).to_stdout
+
+      # Verify that set_user was called with the correct parameters
+      expect(conn).to have_received(:set_user).with(
+        uid: nil,
+        name: "Minimal User",
+        privilege: 0,
+        password: "",
+        group_id: "",
+        user_id: "",
+        card: 0
+      )
+    end
+  end
+
+  describe '#delete_user' do
+    let(:conn) { instance_double(RBZK::ZK) }
+
+    before do
+      allow(cli).to receive(:with_connection).and_yield(conn)
+      allow(conn).to receive(:delete_user).and_return(true)
+    end
+
+    it 'calls delete_user with the uid parameter' do
+      # Set up command line options
+      allow(cli).to receive(:options).and_return({
+        uid: 42,
+        user_id: "EMP123"
+      })
+
+      # Call the method
+      expect { cli.delete_user('192.168.100.201') }.to output(/Deleting user/).to_stdout
+
+      # Verify that delete_user was called with the correct parameters
+      expect(conn).to have_received(:delete_user).with(
+        uid: 42
+      )
+    end
+  end
+
+  describe '#get_user_template' do
+    let(:conn) { instance_double(RBZK::ZK) }
+    let(:template) { instance_double(RBZK::Finger, uid: 42, fid: 1, valid: 1, size: 1024) }
+
+    before do
+      allow(cli).to receive(:with_connection).and_yield(conn)
+      allow(conn).to receive(:get_user_template).and_return(template)
+    end
+
+    it 'creates a User object and calls get_user_template with its attributes' do
+      # Set up command line options
+      allow(cli).to receive(:options).and_return({
+        uid: 42,
+        user_id: "EMP123",
+        finger_id: 1
+      })
+
+      # Call the method
+      expect { cli.get_user_template('192.168.100.201') }.to output(/Getting user fingerprint template/).to_stdout
+
+      # Verify that get_user_template was called with the correct parameters
+      expect(conn).to have_received(:get_user_template).with(
+        uid: 42,
+        temp_id: 1,
+        user_id: "EMP123"
+      )
+    end
+  end
+
 end

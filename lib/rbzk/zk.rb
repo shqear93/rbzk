@@ -488,21 +488,10 @@ module RBZK
       end
     end
 
-    # Delete user by uid or user_id
+    # Delete user by uid
     # @param uid [Integer] user ID that are generated from device
-    # @param user_id [String] your own user ID
     # @return [Boolean] true if successful, raises exception otherwise
-    def delete_user(uid: 0, user_id: '')
-      # If uid is not provided, look up by user_id
-      if uid == 0 && !user_id.empty?
-        users = self.get_users
-        user = users.find { |u| u.user_id == user_id.to_s }
-        if user.nil?
-          return false
-        end
-        uid = user.uid
-      end
-
+    def delete_user(uid: 0)
       # Send command
       command_string = [uid].pack('S<')
       response = self.send_command(CMD_DELETE_USER, command_string)

@@ -419,8 +419,7 @@ module RBZK
         with_connection(ip, options) do |conn|
           puts "Adding/updating user..."
 
-          # Extract user parameters from options
-          user_params = {
+          result = conn.set_user(
             uid: options[:uid],
             name: options[:name] || "",
             privilege: options[:privilege] || 0,
@@ -428,15 +427,8 @@ module RBZK
             group_id: options[:group_id] || "",
             user_id: options[:user_id] || "",
             card: options[:card] || 0
-          }
+          )
 
-          # Ensure all string parameters are strings, not nil
-          user_params[:name] = "" if user_params[:name].nil?
-          user_params[:password] = "" if user_params[:password].nil?
-          user_params[:group_id] = "" if user_params[:group_id].nil?
-          user_params[:user_id] = "" if user_params[:user_id].nil?
-
-          result = conn.set_user(**user_params)
           puts "✓ User added/updated successfully!" if result
         end
       end
@@ -452,20 +444,16 @@ module RBZK
 
         # Ensure at least one of uid or user_id is provided
         if options[:uid].nil? && (options[:user_id].nil? || options[:user_id].empty?)
-          puts "Error: You must provide either --uid or --user-id"
+          puts "Error: You must provide either --uid"
           return
         end
 
         with_connection(ip, options) do |conn|
           puts "Deleting user..."
 
-          # Extract user parameters from options
-          user_params = {
-            uid: options[:uid] || 0,
-            user_id: options[:user_id] || ""
-          }
+          # Use the User object with delete_user
+          result = conn.delete_user(uid: options[:uid])
 
-          result = conn.delete_user(**user_params)
           if result
             puts "✓ User deleted successfully!"
           else
@@ -491,7 +479,7 @@ module RBZK
             # Use Terminal::Table for pretty output
             table = ::Terminal::Table.new do |t|
               t.title = "Fingerprint Templates"
-              t.headings = ['UID', 'Finger ID', 'Valid', 'Size']
+              t.headings = [ 'UID', 'Finger ID', 'Valid', 'Size' ]
 
               templates.each do |template|
                 t << [
