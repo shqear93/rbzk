@@ -348,6 +348,177 @@ module RBZK
       end
     end
 
+    # Unlock the door
+    # @param time [Integer] define delay in seconds
+    # @return [Boolean] true if successful, raises exception otherwise
+    def unlock(time = 3)
+      command_string = [time * 10].pack('L<')
+      response = self.send_command(CMD_UNLOCK, command_string)
+
+      if response && response[:status]
+        true
+      else
+        raise RBZK::ZKErrorResponse, "Can't open door"
+      end
+    end
+
+    # Get the lock state
+    # @return [Boolean] true if door is open, false otherwise
+    def get_lock_state
+      response = self.send_command(CMD_DOORSTATE_RRQ)
+
+      if response && response[:status]
+        true
+      else
+        false
+      end
+    end
+
+    # Write text to LCD
+    # @param line_number [Integer] line number
+    # @param text [String] text to write
+    # @return [Boolean] true if successful, raises exception otherwise
+    def write_lcd(line_number, text)
+      command_string = [line_number, 0].pack('s<c') + ' ' + text.encode(@encoding, invalid: :replace, undef: :replace)
+      response = self.send_command(CMD_WRITE_LCD, command_string)
+
+      if response && response[:status]
+        true
+      else
+        raise RBZK::ZKErrorResponse, "Can't write lcd"
+      end
+    end
+
+    # Clear LCD
+    # @return [Boolean] true if successful, raises exception otherwise
+    def clear_lcd
+      response = self.send_command(CMD_CLEAR_LCD)
+
+      if response && response[:status]
+        true
+      else
+        raise RBZK::ZKErrorResponse, "Can't clear lcd"
+      end
+    end
+
+    # Refresh the device data
+    # @return [Boolean] true if successful, raises exception otherwise
+    def refresh_data
+      response = self.send_command(CMD_REFRESHDATA)
+
+      if response && response[:status]
+        true
+      else
+        raise RBZK::ZKErrorResponse, "Can't refresh data"
+      end
+    end
+
+    # Create or update user by uid
+    # @param uid [Integer] user ID that are generated from device
+    # @param name [String] name of the user
+    # @param privilege [Integer] user privilege level (default or admin)
+    # @param password [String] user password
+    # @param group_id [String] group ID
+    # @param user_id [String] your own user ID
+    # @param card [Integer] card number
+    # @return [Boolean] true if successful, raises exception otherwise
+    def set_user(uid: nil, name: '', privilege: 0, password: '', group_id: '', user_id: '', card: 0)
+      # If uid is not provided, use next_uid
+      if uid.nil?
+        uid = @next_uid
+        if user_id.empty?
+          user_id = @next_user_id
+        end
+      end
+
+      # If user_id is not provided, use uid as string
+      if user_id.empty?
+        user_id = uid.to_s # ZK6 needs uid2 == uid
+      end
+
+      # Validate privilege
+      if privilege != USER_DEFAULT && privilege != USER_ADMIN
+        privilege = USER_DEFAULT
+      end
+      privilege = privilege.to_i
+
+      # Create command string based on user_packet_size
+      if @user_packet_size == 28 # firmware == 6
+        group_id = 0 if group_id.empty?
+
+        begin
+          command_string = [uid, privilege].pack('S<C') +
+                          password.encode(@encoding, invalid: :replace, undef: :replace).ljust(5, "\x00")[0...5] +
+                          name.encode(@encoding, invalid: :replace, undef: :replace).ljust(8, "\x00")[0...8] +
+                          [card.to_i, 0, group_id.to_i, 0, user_id.to_i].pack('L<CS<S<L<')
+        rescue => e
+          if @verbose
+            puts "Error packing user: #{e.message}"
+          end
+          raise RBZK::ZKErrorResponse, "Can't pack user"
+        end
+      else
+        # For other firmware versions
+        name_pad = name.encode(@encoding, invalid: :replace, undef: :replace).ljust(24, "\x00")[0...24]
+        card_str = [card.to_i].pack('L<')[0...4]
+        command_string = [uid, privilege].pack('S<C') +
+                        password.encode(@encoding, invalid: :replace, undef: :replace).ljust(8, "\x00")[0...8] +
+                        name_pad +
+                        card_str + "\x00" +
+                        group_id.encode(@encoding, invalid: :replace, undef: :replace).ljust(7, "\x00")[0...7] +
+                        "\x00" +
+                        user_id.encode(@encoding, invalid: :replace, undef: :replace).ljust(24, "\x00")[0...24]
+      end
+
+      # Send command
+      response = self.send_command(CMD_USER_WRQ, command_string, 1024)
+
+      if response && response[:status]
+        # Update next_uid and next_user_id if necessary
+        self.refresh_data
+        if @next_uid == uid
+          @next_uid += 1
+        end
+        if @next_user_id == user_id
+          @next_user_id = @next_uid.to_s
+        end
+        true
+      else
+        raise RBZK::ZKErrorResponse, "Can't set user"
+      end
+    end
+
+    # Delete user by uid or user_id
+    # @param uid [Integer] user ID that are generated from device
+    # @param user_id [String] your own user ID
+    # @return [Boolean] true if successful, raises exception otherwise
+    def delete_user(uid: 0, user_id: '')
+      # If uid is not provided, look up by user_id
+      if uid == 0 && !user_id.empty?
+        users = self.get_users
+        user = users.find { |u| u.user_id == user_id.to_s }
+        if user.nil?
+          return false
+        end
+        uid = user.uid
+      end
+
+      # Send command
+      command_string = [uid].pack('S<')
+      response = self.send_command(CMD_DELETE_USER, command_string)
+
+      if response && response[:status]
+        self.refresh_data
+        # Update next_uid if necessary
+        if uid == (@next_uid - 1)
+          @next_uid = uid
+        end
+        true
+      else
+        raise RBZK::ZKErrorResponse, "Can't delete user"
+      end
+    end
+
     # Helper method to read data with buffer (ZK6: 1503)
     def read_with_buffer(command, fct = 0, ext = 0)
 
@@ -714,6 +885,50 @@ module RBZK
         true
       else
         raise RBZK::ZKErrorResponse, "Can't free data"
+      end
+    end
+
+    # Send data with buffer
+    # @param buffer [String] data to send
+    # @return [Boolean] true if successful, raises exception otherwise
+    def send_with_buffer(buffer)
+      max_chunk = 1024
+      size = buffer.size
+      self.free_data
+
+      command = CMD_PREPARE_DATA
+      command_string = [size].pack('L<')
+      response = self.send_command(command, command_string)
+
+      if !response || !response[:status]
+        raise RBZK::ZKErrorResponse, "Can't prepare data"
+      end
+
+      remain = size % max_chunk
+      packets = (size - remain) / max_chunk
+      start = 0
+
+      packets.times do
+        send_chunk(buffer[start, max_chunk])
+        start += max_chunk
+      end
+
+      send_chunk(buffer[start, remain]) if remain > 0
+
+      true
+    end
+
+    # Send a chunk of data
+    # @param command_string [String] data to send
+    # @return [Boolean] true if successful, raises exception otherwise
+    def send_chunk(command_string)
+      command = CMD_DATA
+      response = self.send_command(command, command_string)
+
+      if response && response[:status]
+        true
+      else
+        raise RBZK::ZKErrorResponse, "Can't send chunk"
       end
     end
 
