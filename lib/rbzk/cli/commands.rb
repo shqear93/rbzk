@@ -626,7 +626,7 @@ module RBZK
         ip ||= options[:ip] || @config['ip']
 
         if yes?("Are you sure you want to restart the device? (y/N)")
-          with_connection(ip, options) do |conn|
+          with_connection(ip, options.merge(skip_disconnect_after_yield: true)) do |conn|
             puts "Restarting device..."
             result = conn.restart
             puts "✓ Device restart command sent successfully!" if result
@@ -644,7 +644,7 @@ module RBZK
         ip ||= options[:ip] || @config['ip']
 
         if yes?("Are you sure you want to power off the device? (y/N)")
-          with_connection(ip, options) do |conn|
+          with_connection(ip, options.merge(skip_disconnect_after_yield: true)) do |conn|
             puts "Powering off device..."
             result = conn.poweroff
             puts "✓ Device poweroff command sent successfully!" if result
@@ -704,26 +704,30 @@ module RBZK
       end
 
       def with_connection(ip, options = {})
-        puts "Connecting to ZKTeco device at #{ip}:#{options[:port] || @config['port'] || 4370}..."
+        local_opts = options.dup # Use a copy for local modifications and access
+        skip_disconnect = local_opts.delete(:skip_disconnect_after_yield) || false
+
+        puts "Connecting to ZKTeco device at #{ip}:#{local_opts[:port] || @config['port'] || 4370}..." # Use local_opts
         puts "Please ensure the device is powered on and connected to the network."
 
+        conn = nil # Initialize conn for safety in ensure block
         begin
           # Create ZK instance with options from config and command line
           zk_options = {
-            port: options[:port] || @config['port'] || 4370,
-            timeout: options[:timeout] || @config['timeout'] || 30,
-            password: options[:password] || @config['password'] || 0,
-            verbose: options[:verbose] || @config['verbose'] || false,
-            force_udp: options[:force_udp] || @config['force_udp'] || false,
-            omit_ping: options[:no_ping] || @config['no_ping'] || false,
-            encoding: options[:encoding] || @config['encoding'] || 'UTF-8'
+            port: local_opts[:port] || @config['port'] || 4370, # Use local_opts
+            timeout: local_opts[:timeout] || @config['timeout'] || 30, # Use local_opts
+            password: local_opts[:password] || @config['password'] || 0, # Use local_opts
+            verbose: local_opts[:verbose] || @config['verbose'] || false, # Use local_opts
+            force_udp: local_opts[:force_udp] || @config['force_udp'] || false, # Use local_opts
+            omit_ping: local_opts[:no_ping] || @config['no_ping'] || false, # Use local_opts
+            encoding: local_opts[:encoding] || @config['encoding'] || 'UTF-8' # Use local_opts
           }
 
           zk = RBZK::ZK.new(ip, **zk_options)
           conn = zk.connect
 
           if conn.connected?
-            puts "✓ Connected successfully!" unless options[:quiet]
+            puts "✓ Connected successfully!" unless local_opts[:quiet] # Use local_opts
             yield conn if block_given?
           else
             puts "✗ Failed to connect to device."
@@ -737,12 +741,16 @@ module RBZK
         rescue => e
           puts "✗ Unexpected Error: #{e.message}"
           puts "An unexpected error occurred while communicating with the device."
-          puts e.backtrace.join("\n") if options[:verbose]
+          puts e.backtrace.join("\n") if local_opts[:verbose] # Use local_opts
         ensure
           if conn && conn.connected?
-            puts "Disconnecting from device..." unless options[:quiet]
-            conn.disconnect
-            puts "✓ Disconnected" unless options[:quiet]
+            if skip_disconnect
+              puts "Skipping disconnect as device is undergoing restart/poweroff." unless local_opts[:quiet] # Use local_opts
+            else
+              puts "Disconnecting from device..." unless local_opts[:quiet] # Use local_opts
+              conn.disconnect
+              puts "✓ Disconnected" unless local_opts[:quiet] # Use local_opts
+            end
           end
         end
       end
