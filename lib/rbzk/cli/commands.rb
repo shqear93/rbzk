@@ -5,6 +5,7 @@ require 'thor'
 require 'yaml'
 require 'fileutils'
 require 'date'
+require 'time'
 require 'rbzk'
 require 'rbzk/cli/config'
 require 'terminal-table'
@@ -100,43 +101,33 @@ module RBZK
         end
       end
 
-      desc "logs [IP]", "Get attendance logs"
-      method_option :today, type: :boolean, desc: "Get only today's logs"
-      method_option :yesterday, type: :boolean, desc: "Get only yesterday's logs"
-      method_option :week, type: :boolean, desc: "Get this week's logs"
-      method_option :month, type: :boolean, desc: "Get this month's logs"
-      method_option :start_date, type: :string, desc: "Start date for custom range (YYYY-MM-DD)"
-      method_option :end_date, type: :string, desc: "End date for custom range (YYYY-MM-DD)"
-      method_option :limit, type: :numeric, default: 25, desc: "Limit the number of logs displayed (default: 25, use 0 for all)"
-
       # Add aliases for common log commands
       desc "logs-today [IP]", "Get today's attendance logs"
       map "logs-today" => "logs"
 
       def logs_today(ip = nil)
-
-        invoke :logs, [ ip ], today: true
+        invoke :logs, [ ip ], { today: true }.merge(options)
       end
 
       desc "logs-yesterday [IP]", "Get yesterday's attendance logs"
       map "logs-yesterday" => "logs"
 
       def logs_yesterday(ip = nil)
-        invoke :logs, [ ip ], yesterday: true
+        invoke :logs, [ ip ], { yesterday: true }.merge(options)
       end
 
       desc "logs-week [IP]", "Get this week's attendance logs"
       map "logs-week" => "logs"
 
       def logs_week(ip = nil)
-        invoke :logs, [ ip ], week: true
+        invoke :logs, [ ip ], { week: true }.merge(options)
       end
 
       desc "logs-month [IP]", "Get this month's attendance logs"
       map "logs-month" => "logs"
 
       def logs_month(ip = nil)
-        invoke :logs, [ ip ], month: true
+        invoke :logs, [ ip ], { month: true }.merge(options)
       end
 
       desc "logs-all [IP]", "Get all attendance logs without limit"
@@ -190,10 +181,19 @@ module RBZK
       def logs_custom(start_date, end_date, ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
-        invoke :logs, [ ip ], start_date: start_date, end_date: end_date
+        invoke :logs, [ ip ], { start_date: start_date, end_date: end_date }.merge(options)
       end
 
-      desc "logs [IP]", "Get all attendance logs"
+      desc "logs [IP]", "Get attendance logs"
+      method_option :today, type: :boolean, desc: "Get only today's logs"
+      method_option :yesterday, type: :boolean, desc: "Get only yesterday's logs"
+      method_option :week, type: :boolean, desc: "Get this week's logs"
+      method_option :month, type: :boolean, desc: "Get this month's logs"
+      method_option :start_date, type: :string, desc: "Start date for custom range (YYYY-MM-DD)"
+      method_option :end_date, type: :string, desc: "End date for custom range (YYYY-MM-DD)"
+      method_option :start_time, type: :string, desc: "Start time for custom range (HH:MM)"
+      method_option :end_time, type: :string, desc: "End time for custom range (HH:MM)"
+      method_option :limit, type: :numeric, default: 25, desc: "Limit the number of logs displayed (default: 25, use 0 for all)"
 
       def logs(ip = nil)
         # Use IP from options if not provided as argument
@@ -208,21 +208,21 @@ module RBZK
           # Filter logs based on options
           title = if options[:today]
                     today = Date.today
-                    logs = filter_logs_by_date(logs, today, today)
+                    logs = filter_logs_by_datetime(logs, today, today, options[:start_time], options[:end_time])
                     "Today's Attendance Logs (#{today})"
                   elsif options[:yesterday]
                     yesterday = Date.today - 1
-                    logs = filter_logs_by_date(logs, yesterday, yesterday)
+                    logs = filter_logs_by_datetime(logs, yesterday, yesterday, options[:start_time], options[:end_time])
                     "Yesterday's Attendance Logs (#{yesterday})"
                   elsif options[:week]
                     today = Date.today
                     start_of_week = today - today.wday
-                    logs = filter_logs_by_date(logs, start_of_week, today)
+                    logs = filter_logs_by_datetime(logs, start_of_week, today, options[:start_time], options[:end_time])
                     "This Week's Attendance Logs (#{start_of_week} to #{today})"
                   elsif options[:month]
                     today = Date.today
                     start_of_month = Date.new(today.year, today.month, 1)
-                    logs = filter_logs_by_date(logs, start_of_month, today)
+                    logs = filter_logs_by_datetime(logs, start_of_month, today, options[:start_time], options[:end_time])
                     "This Month's Attendance Logs (#{start_of_month} to #{today})"
                   elsif options[:start_date] && options[:end_date]
                     begin
@@ -232,8 +232,8 @@ module RBZK
                       # Print debug info
                       puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
 
-                      # Use the filter_logs_by_date method
-                      logs = filter_logs_by_date(logs, start_date, end_date)
+                      # Use the filter_logs_by_datetime method
+                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time], options[:end_time])
 
                       "Attendance Logs (#{start_date} to #{end_date})"
                     rescue ArgumentError
@@ -248,8 +248,8 @@ module RBZK
                       # Print debug info
                       puts "Filtering logs from #{start_date} onwards..." if options[:verbose]
 
-                      # Use the filter_logs_by_date method
-                      logs = filter_logs_by_date(logs, start_date, end_date)
+                      # Use the filter_logs_by_datetime method
+                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time], options[:end_time])
 
                       "Attendance Logs (#{start_date} to #{end_date})"
                     rescue ArgumentError
@@ -265,8 +265,8 @@ module RBZK
                       # Print debug info
                       puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
 
-                      # Use the filter_logs_by_date method
-                      logs = filter_logs_by_date(logs, start_date, end_date)
+                      # Use the filter_logs_by_datetime method
+                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time], options[:end_time])
 
                       "Attendance Logs (#{start_date} to #{end_date})"
                     rescue ArgumentError
@@ -783,31 +783,26 @@ module RBZK
         end
       end
 
-      def filter_logs_by_date(logs, start_date, end_date)
-        # Convert Date objects to strings for comparison
-        total_logs = logs.size
-        start_date_str = start_date.strftime('%Y-%m-%d')
-        end_date_str = end_date.strftime('%Y-%m-%d')
+      def filter_logs_by_datetime(logs, start_date, end_date, start_time = nil, end_time = nil)
+        start_datetime_str = "#{start_date.strftime('%Y-%m-%d')} #{start_time || '00:00:00'}"
+        end_datetime_str = "#{end_date.strftime('%Y-%m-%d')} #{end_time || '23:59:59'}"
+
+        start_datetime = Time.parse(start_datetime_str)
+        end_datetime = Time.parse(end_datetime_str)
 
         if options[:verbose]
-          puts "Filtering logs from #{start_date_str} to #{end_date_str}..."
-          puts "Total logs before filtering: #{total_logs}"
+          puts "Filtering logs from #{start_datetime} to #{end_datetime}..."
+          puts "Total logs before filtering: #{logs.size}"
         end
 
-        # Filter logs by date range using string comparison
-        filtered_logs = []
-        logs.each do |log|
-          log_date_str = log.timestamp.strftime('%Y-%m-%d')
-          if log_date_str >= start_date_str && log_date_str <= end_date_str
-            filtered_logs << log
-          end
+        filtered_logs = logs.select do |log|
+          log.timestamp >= start_datetime && log.timestamp <= end_datetime
         end
 
         if options[:verbose]
-          puts "Filtered logs: #{filtered_logs.size} of #{total_logs}"
+          puts "Filtered logs: #{filtered_logs.size} of #{logs.size}"
         end
 
-        # Return the filtered logs
         filtered_logs
       end
 
