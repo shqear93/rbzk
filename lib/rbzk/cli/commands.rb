@@ -13,7 +13,6 @@ require 'terminal-table'
 module RBZK
   module CLI
     class Commands < Thor
-
       # Global options
       class_option :ip, type: :string, desc: 'IP address of the device'
       class_option :port, type: :numeric, desc: 'Port number (default: 4370)'
@@ -24,10 +23,13 @@ module RBZK
       class_option :no_ping, type: :boolean, desc: 'Skip ping check'
       class_option :encoding, type: :string, desc: 'Encoding for strings (default: UTF-8)'
 
-      desc "info [IP]", "Get device information"
+      def self.exit_on_failure?
+        true
+      end
+
+      desc 'info [IP]', 'Get device information'
 
       def info(ip = nil)
-
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
 
@@ -59,16 +61,16 @@ module RBZK
           if defined?(::Terminal) && defined?(::Terminal::Table)
             # Pretty table output
             table = ::Terminal::Table.new do |t|
-              t.title = "Device Information"
+              t.title = 'Device Information'
               device_info.each do |key, value|
-                t << [ key, value ]
+                t << [key, value]
               end
             end
 
             puts table
           else
             # Fallback plain text output
-            puts "Device Information:"
+            puts 'Device Information:'
             device_info.each do |key, value|
               puts "#{key}: #{value}"
             end
@@ -76,61 +78,61 @@ module RBZK
         end
       end
 
-      desc "refresh [IP]", "Refresh device data"
+      desc 'refresh [IP]', 'Refresh device data'
 
       def refresh(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
 
         with_connection(ip, options) do |conn|
-          puts "Refreshing device data..."
+          puts 'Refreshing device data...'
           result = conn.refresh_data
-          puts "✓ Device data refreshed successfully!" if result
+          puts '✓ Device data refreshed successfully!' if result
         end
       end
 
-      desc "users [IP]", "Get users from the device"
+      desc 'users [IP]', 'Get users from the device'
 
       def users(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
-          puts "Getting users..."
+          puts 'Getting users...'
           users = conn.get_users
           display_users(users)
         end
       end
 
       # Add aliases for common log commands
-      desc "logs-today [IP]", "Get today's attendance logs"
-      map "logs-today" => "logs"
+      desc 'logs-today [IP]', "Get today's attendance logs"
+      map 'logs-today' => 'logs'
 
       def logs_today(ip = nil)
-        invoke :logs, [ ip ], { today: true }.merge(options)
+        invoke :logs, [ip], { today: true }.merge(options)
       end
 
-      desc "logs-yesterday [IP]", "Get yesterday's attendance logs"
-      map "logs-yesterday" => "logs"
+      desc 'logs-yesterday [IP]', "Get yesterday's attendance logs"
+      map 'logs-yesterday' => 'logs'
 
       def logs_yesterday(ip = nil)
-        invoke :logs, [ ip ], { yesterday: true }.merge(options)
+        invoke :logs, [ip], { yesterday: true }.merge(options)
       end
 
-      desc "logs-week [IP]", "Get this week's attendance logs"
-      map "logs-week" => "logs"
+      desc 'logs-week [IP]', "Get this week's attendance logs"
+      map 'logs-week' => 'logs'
 
       def logs_week(ip = nil)
-        invoke :logs, [ ip ], { week: true }.merge(options)
+        invoke :logs, [ip], { week: true }.merge(options)
       end
 
-      desc "logs-month [IP]", "Get this month's attendance logs"
-      map "logs-month" => "logs"
+      desc 'logs-month [IP]', "Get this month's attendance logs"
+      map 'logs-month' => 'logs'
 
       def logs_month(ip = nil)
-        invoke :logs, [ ip ], { month: true }.merge(options)
+        invoke :logs, [ip], { month: true }.merge(options)
       end
 
-      desc "logs-all [IP]", "Get all attendance logs without limit"
+      desc 'logs-all [IP]', 'Get all attendance logs without limit'
 
       def logs_all(ip = nil)
         # Use IP from options if not provided as argument
@@ -138,7 +140,7 @@ module RBZK
 
         with_connection(ip, options) do |conn|
           # Get attendance logs
-          puts "Getting all attendance logs (this may take a while)..."
+          puts 'Getting all attendance logs (this may take a while)...'
           logs = conn.get_attendance_logs
           total_logs = logs.size
           puts "Total logs: #{total_logs}" if options[:verbose]
@@ -150,8 +152,8 @@ module RBZK
             if defined?(::Terminal) && defined?(::Terminal::Table)
               # Pretty table output
               table = ::Terminal::Table.new do |t|
-                t.title = "All Attendance Logs (Showing All Records)"
-                t.headings = [ 'User ID', 'Time', 'Status' ]
+                t.title = 'All Attendance Logs (Showing All Records)'
+                t.headings = ['User ID', 'Time', 'Status']
 
                 # Show all logs in the table
                 logs.each do |log|
@@ -176,31 +178,32 @@ module RBZK
         end
       end
 
-      desc "logs-custom START_DATE END_DATE [IP]", "Get logs for a custom date range (YYYY-MM-DD)"
+      desc 'logs-custom START_DATE END_DATE [IP]', 'Get logs for a custom date range (YYYY-MM-DD)'
 
       def logs_custom(start_date, end_date, ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
-        invoke :logs, [ ip ], { start_date: start_date, end_date: end_date }.merge(options)
+        invoke :logs, [ip], { start_date: start_date, end_date: end_date }.merge(options)
       end
 
-      desc "logs [IP]", "Get attendance logs"
+      desc 'logs [IP]', 'Get attendance logs'
       method_option :today, type: :boolean, desc: "Get only today's logs"
       method_option :yesterday, type: :boolean, desc: "Get only yesterday's logs"
       method_option :week, type: :boolean, desc: "Get this week's logs"
       method_option :month, type: :boolean, desc: "Get this month's logs"
-      method_option :start_date, type: :string, desc: "Start date for custom range (YYYY-MM-DD)"
-      method_option :end_date, type: :string, desc: "End date for custom range (YYYY-MM-DD)"
-      method_option :start_time, type: :string, desc: "Start time for custom range (HH:MM)"
-      method_option :end_time, type: :string, desc: "End time for custom range (HH:MM)"
-      method_option :limit, type: :numeric, default: 25, desc: "Limit the number of logs displayed (default: 25, use 0 for all)"
+      method_option :start_date, type: :string, desc: 'Start date for custom range (YYYY-MM-DD)'
+      method_option :end_date, type: :string, desc: 'End date for custom range (YYYY-MM-DD)'
+      method_option :start_time, type: :string, desc: 'Start time for custom range (HH:MM)'
+      method_option :end_time, type: :string, desc: 'End time for custom range (HH:MM)'
+      method_option :limit, type: :numeric, default: 25,
+                            desc: 'Limit the number of logs displayed (default: 25, use 0 for all)'
 
       def logs(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
           # Get attendance logs
-          puts "Getting attendance logs..."
+          puts 'Getting attendance logs...'
           logs = conn.get_attendance_logs
           total_logs = logs.size
           puts "Total logs: #{total_logs}" if options[:verbose]
@@ -222,7 +225,8 @@ module RBZK
                   elsif options[:month]
                     today = Date.today
                     start_of_month = Date.new(today.year, today.month, 1)
-                    logs = filter_logs_by_datetime(logs, start_of_month, today, options[:start_time], options[:end_time])
+                    logs = filter_logs_by_datetime(logs, start_of_month, today, options[:start_time],
+                                                   options[:end_time])
                     "This Month's Attendance Logs (#{start_of_month} to #{today})"
                   elsif options[:start_date] && options[:end_date]
                     begin
@@ -233,11 +237,12 @@ module RBZK
                       puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
 
                       # Use the filter_logs_by_datetime method
-                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time], options[:end_time])
+                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time],
+                                                     options[:end_time])
 
                       "Attendance Logs (#{start_date} to #{end_date})"
                     rescue ArgumentError
-                      puts "Error: Invalid date format. Please use YYYY-MM-DD format."
+                      puts 'Error: Invalid date format. Please use YYYY-MM-DD format.'
                       return
                     end
                   elsif options[:start_date]
@@ -249,11 +254,12 @@ module RBZK
                       puts "Filtering logs from #{start_date} onwards..." if options[:verbose]
 
                       # Use the filter_logs_by_datetime method
-                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time], options[:end_time])
+                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time],
+                                                     options[:end_time])
 
                       "Attendance Logs (#{start_date} to #{end_date})"
                     rescue ArgumentError
-                      puts "Error: Invalid date format. Please use YYYY-MM-DD format."
+                      puts 'Error: Invalid date format. Please use YYYY-MM-DD format.'
                       return
                     end
                   elsif options[:end_date]
@@ -266,15 +272,16 @@ module RBZK
                       puts "Filtering logs from #{start_date} to #{end_date}..." if options[:verbose]
 
                       # Use the filter_logs_by_datetime method
-                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time], options[:end_time])
+                      logs = filter_logs_by_datetime(logs, start_date, end_date, options[:start_time],
+                                                     options[:end_time])
 
                       "Attendance Logs (#{start_date} to #{end_date})"
                     rescue ArgumentError
-                      puts "Error: Invalid date format. Please use YYYY-MM-DD format."
+                      puts 'Error: Invalid date format. Please use YYYY-MM-DD format.'
                       return
                     end
                   else
-                    "All Attendance Logs"
+                    'All Attendance Logs'
                   end
 
           # Display logs
@@ -288,8 +295,8 @@ module RBZK
             if defined?(::Terminal) && defined?(::Terminal::Table)
               # Pretty table output
               table = ::Terminal::Table.new do |t|
-                t.title = title || "Attendance Logs"
-                t.headings = [ 'User ID', 'Time', 'Status' ]
+                t.title = title || 'Attendance Logs'
+                t.headings = ['User ID', 'Time', 'Status']
 
                 # Show logs in the table based on limit
                 display_logs.each do |log|
@@ -313,9 +320,7 @@ module RBZK
                 puts "  User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}"
               end
 
-              if logs.size > display_logs.size
-                puts "  ... and #{logs.size - display_logs.size} more records"
-              end
+              puts "  ... and #{logs.size - display_logs.size} more records" if logs.size > display_logs.size
             end
           else
             puts "\nNo attendance records found"
@@ -323,26 +328,25 @@ module RBZK
         end
       end
 
-      desc "clear-logs [IP]", "Clear attendance logs"
-      map "clear-logs" => :clear_logs
+      desc 'clear-logs [IP]', 'Clear attendance logs'
+      map 'clear-logs' => :clear_logs
 
       def clear_logs(ip = nil)
-
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
         with_connection(ip, options) do |conn|
-          puts "WARNING: This will delete all attendance logs from the device."
-          return unless yes?("Are you sure you want to continue? (y/N)")
+          puts 'WARNING: This will delete all attendance logs from the device.'
+          return unless yes?('Are you sure you want to continue? (y/N)')
 
-          puts "Clearing attendance logs..."
+          puts 'Clearing attendance logs...'
           result = conn.clear_attendance
-          puts "✓ Attendance logs cleared successfully!" if result
+          puts '✓ Attendance logs cleared successfully!' if result
         end
       end
 
-      desc "unlock [IP]", "Unlock the door"
-      method_option :time, type: :numeric, default: 3, desc: "Unlock time in seconds (default: 3)"
-      map "unlock" => :unlock_door
+      desc 'unlock [IP]', 'Unlock the door'
+      method_option :time, type: :numeric, default: 3, desc: 'Unlock time in seconds (default: 3)'
+      map 'unlock' => :unlock_door
 
       def unlock_door(ip = nil)
         # Use IP from options if not provided as argument
@@ -354,12 +358,12 @@ module RBZK
         with_connection(ip, options) do |conn|
           puts "Unlocking door for #{time} seconds..."
           result = conn.unlock(time)
-          puts "✓ Door unlocked successfully!" if result
+          puts '✓ Door unlocked successfully!' if result
         end
       end
 
-      desc "door-state [IP]", "Get the door lock state"
-      map "door-state" => :door_state
+      desc 'door-state [IP]', 'Get the door lock state'
+      map 'door-state' => :door_state
 
       def door_state(ip = nil)
         # Use IP from options if not provided as argument
@@ -371,8 +375,8 @@ module RBZK
         end
       end
 
-      desc "write-lcd [IP] LINE_NUMBER TEXT", "Write text to LCD display"
-      map "write-lcd" => :write_lcd
+      desc 'write-lcd [IP] LINE_NUMBER TEXT', 'Write text to LCD display'
+      map 'write-lcd' => :write_lcd
 
       def write_lcd(line_number, text, ip = nil)
         # Use IP from options if not provided as argument
@@ -384,59 +388,59 @@ module RBZK
         with_connection(ip, options) do |conn|
           puts "Writing text to LCD line #{line_number}..."
           result = conn.write_lcd(line_number, text)
-          puts "✓ Text written to LCD successfully!" if result
+          puts '✓ Text written to LCD successfully!' if result
         end
       end
 
-      desc "clear-lcd [IP]", "Clear the LCD display"
-      map "clear-lcd" => :clear_lcd
+      desc 'clear-lcd [IP]', 'Clear the LCD display'
+      map 'clear-lcd' => :clear_lcd
 
       def clear_lcd(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
 
         with_connection(ip, options) do |conn|
-          puts "Clearing LCD display..."
+          puts 'Clearing LCD display...'
           result = conn.clear_lcd
-          puts "✓ LCD cleared successfully!" if result
+          puts '✓ LCD cleared successfully!' if result
         end
       end
 
-      desc "add-user [IP]", "Add or update a user"
-      method_option :uid, type: :numeric, desc: "User ID (generated by device if not provided)"
-      method_option :name, type: :string, default: "", desc: "User name"
-      method_option :privilege, type: :numeric, default: 0, desc: "User privilege (0=User, 14=Admin)"
-      method_option :password, type: :string, default: "", desc: "User password"
-      method_option :group_id, type: :string, default: "", desc: "Group ID"
-      method_option :user_id, type: :string, default: "", desc: "Custom user ID"
-      method_option :card, type: :numeric, default: 0, desc: "Card number"
-      map "add-user" => :add_user
+      desc 'add-user [IP]', 'Add or update a user'
+      method_option :uid, type: :numeric, desc: 'User ID (generated by device if not provided)'
+      method_option :name, type: :string, default: '', desc: 'User name'
+      method_option :privilege, type: :numeric, default: 0, desc: 'User privilege (0=User, 14=Admin)'
+      method_option :password, type: :string, default: '', desc: 'User password'
+      method_option :group_id, type: :string, default: '', desc: 'Group ID'
+      method_option :user_id, type: :string, default: '', desc: 'Custom user ID'
+      method_option :card, type: :numeric, default: 0, desc: 'Card number'
+      map 'add-user' => :add_user
 
       def add_user(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
 
         with_connection(ip, options) do |conn|
-          puts "Adding/updating user..."
+          puts 'Adding/updating user...'
 
           result = conn.set_user(
             uid: options[:uid],
-            name: options[:name] || "",
+            name: options[:name] || '',
             privilege: options[:privilege] || 0,
-            password: options[:password] || "",
-            group_id: options[:group_id] || "",
-            user_id: options[:user_id] || "",
+            password: options[:password] || '',
+            group_id: options[:group_id] || '',
+            user_id: options[:user_id] || '',
             card: options[:card] || 0
           )
 
-          puts "✓ User added/updated successfully!" if result
+          puts '✓ User added/updated successfully!' if result
         end
       end
 
-      desc "delete-user [IP]", "Delete a user"
-      method_option :uid, type: :numeric, desc: "User ID (generated by device)"
-      method_option :user_id, type: :string, desc: "Custom user ID"
-      map "delete-user" => :delete_user
+      desc 'delete-user [IP]', 'Delete a user'
+      method_option :uid, type: :numeric, desc: 'User ID (generated by device)'
+      method_option :user_id, type: :string, desc: 'Custom user ID'
+      map 'delete-user' => :delete_user
 
       def delete_user(ip = nil)
         # Use IP from options if not provided as argument
@@ -444,33 +448,33 @@ module RBZK
 
         # Ensure at least one of uid or user_id is provided
         if options[:uid].nil? && (options[:user_id].nil? || options[:user_id].empty?)
-          puts "Error: You must provide either --uid"
+          puts 'Error: You must provide either --uid'
           return
         end
 
         with_connection(ip, options) do |conn|
-          puts "Deleting user..."
+          puts 'Deleting user...'
 
           # Use the User object with delete_user
           result = conn.delete_user(uid: options[:uid])
 
           if result
-            puts "✓ User deleted successfully!"
+            puts '✓ User deleted successfully!'
           else
-            puts "✗ User not found or could not be deleted."
+            puts '✗ User not found or could not be deleted.'
           end
         end
       end
 
-      desc "get-templates [IP]", "Get all fingerprint templates"
-      map "get-templates" => :get_templates
+      desc 'get-templates [IP]', 'Get all fingerprint templates'
+      map 'get-templates' => :get_templates
 
       def get_templates(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
 
         with_connection(ip, options) do |conn|
-          puts "Getting fingerprint templates..."
+          puts 'Getting fingerprint templates...'
           templates = conn.get_templates
 
           if templates && !templates.empty?
@@ -478,8 +482,8 @@ module RBZK
 
             # Use Terminal::Table for pretty output
             table = ::Terminal::Table.new do |t|
-              t.title = "Fingerprint Templates"
-              t.headings = [ 'UID', 'Finger ID', 'Valid', 'Size' ]
+              t.title = 'Fingerprint Templates'
+              t.headings = ['UID', 'Finger ID', 'Valid', 'Size']
 
               templates.each do |template|
                 t << [
@@ -493,16 +497,16 @@ module RBZK
 
             puts table
           else
-            puts "✓ No fingerprint templates found"
+            puts '✓ No fingerprint templates found'
           end
         end
       end
 
-      desc "get-user-template [IP]", "Get a specific user's fingerprint template"
-      method_option :uid, type: :numeric, desc: "User ID (generated by device)"
-      method_option :user_id, type: :string, desc: "Custom user ID"
-      method_option :finger_id, type: :numeric, default: 0, desc: "Finger ID (0-9)"
-      map "get-user-template" => :get_user_template
+      desc 'get-user-template [IP]', "Get a specific user's fingerprint template"
+      method_option :uid, type: :numeric, desc: 'User ID (generated by device)'
+      method_option :user_id, type: :string, desc: 'Custom user ID'
+      method_option :finger_id, type: :numeric, default: 0, desc: 'Finger ID (0-9)'
+      map 'get-user-template' => :get_user_template
 
       def get_user_template(ip = nil)
         # Use IP from options if not provided as argument
@@ -510,37 +514,37 @@ module RBZK
 
         # Ensure at least one of uid or user_id is provided
         if options[:uid].nil? && (options[:user_id].nil? || options[:user_id].empty?)
-          puts "Error: You must provide either --uid or --user-id"
+          puts 'Error: You must provide either --uid or --user-id'
           return
         end
 
         with_connection(ip, options) do |conn|
-          puts "Getting user fingerprint template..."
+          puts 'Getting user fingerprint template...'
 
           # Extract parameters from options
           uid = options[:uid] || 0
-          user_id = options[:user_id] || ""
+          user_id = options[:user_id] || ''
           finger_id = options[:finger_id] || 0
 
           template = conn.get_user_template(uid: uid, temp_id: finger_id, user_id: user_id)
 
           if template
-            puts "✓ Found fingerprint template:"
+            puts '✓ Found fingerprint template:'
             puts "  User ID: #{template.uid}"
             puts "  Finger ID: #{template.fid}"
             puts "  Valid: #{template.valid == 1 ? 'Yes' : 'No'}"
             puts "  Size: #{template.size} bytes"
           else
-            puts "✗ Fingerprint template not found"
+            puts '✗ Fingerprint template not found'
           end
         end
       end
 
-      desc "delete-template [IP]", "Delete a specific fingerprint template"
-      method_option :uid, type: :numeric, desc: "User ID (generated by device)"
-      method_option :user_id, type: :string, desc: "Custom user ID"
-      method_option :finger_id, type: :numeric, default: 0, desc: "Finger ID (0-9)"
-      map "delete-template" => :delete_template
+      desc 'delete-template [IP]', 'Delete a specific fingerprint template'
+      method_option :uid, type: :numeric, desc: 'User ID (generated by device)'
+      method_option :user_id, type: :string, desc: 'Custom user ID'
+      method_option :finger_id, type: :numeric, default: 0, desc: 'Finger ID (0-9)'
+      map 'delete-template' => :delete_template
 
       def delete_template(ip = nil)
         # Use IP from options if not provided as argument
@@ -548,31 +552,31 @@ module RBZK
 
         # Ensure at least one of uid or user_id is provided
         if options[:uid].nil? && (options[:user_id].nil? || options[:user_id].empty?)
-          puts "Error: You must provide either --uid or --user-id"
+          puts 'Error: You must provide either --uid or --user-id'
           return
         end
 
         with_connection(ip, options) do |conn|
-          puts "Deleting fingerprint template..."
+          puts 'Deleting fingerprint template...'
 
           # Extract parameters from options
           uid = options[:uid] || 0
-          user_id = options[:user_id] || ""
+          user_id = options[:user_id] || ''
           finger_id = options[:finger_id] || 0
 
           result = conn.delete_user_template(uid: uid, temp_id: finger_id, user_id: user_id)
 
           if result
-            puts "✓ Fingerprint template deleted successfully!"
+            puts '✓ Fingerprint template deleted successfully!'
           else
-            puts "✗ Fingerprint template not found or could not be deleted"
+            puts '✗ Fingerprint template not found or could not be deleted'
           end
         end
       end
 
-      desc "test-voice [IP]", "Test the device voice"
-      method_option :index, type: :numeric, desc: "Sound index to play (0-35, default: 0)"
-      map "test-voice" => :test_voice
+      desc 'test-voice [IP]', 'Test the device voice'
+      method_option :index, type: :numeric, desc: 'Sound index to play (0-35, default: 0)'
+      map 'test-voice' => :test_voice
 
       def test_voice(ip = nil)
         # Use IP from options if not provided as argument
@@ -583,89 +587,89 @@ module RBZK
 
         # Print available sound indices if verbose
         if options[:verbose]
-          puts "Available sound indices:"
-          puts " 0: Thank You"
-          puts " 1: Incorrect Password"
-          puts " 2: Access Denied"
-          puts " 3: Invalid ID"
-          puts " 4: Please try again"
-          puts " 5: Duplicate ID"
-          puts " 6: The clock is flow"
-          puts " 7: The clock is full"
-          puts " 8: Duplicate finger"
-          puts " 9: Duplicated punch"
-          puts "10: Beep kuko"
-          puts "11: Beep siren"
-          puts "13: Beep bell"
-          puts "18: Windows(R) opening sound"
-          puts "20: Fingerprint not emolt"
-          puts "21: Password not emolt"
-          puts "22: Badges not emolt"
-          puts "23: Face not emolt"
-          puts "24: Beep standard"
-          puts "30: Invalid user"
-          puts "31: Invalid time period"
-          puts "32: Invalid combination"
-          puts "33: Illegal Access"
-          puts "34: Disk space full"
-          puts "35: Duplicate fingerprint"
-          puts "51: Focus eyes on the green box"
+          puts 'Available sound indices:'
+          puts ' 0: Thank You'
+          puts ' 1: Incorrect Password'
+          puts ' 2: Access Denied'
+          puts ' 3: Invalid ID'
+          puts ' 4: Please try again'
+          puts ' 5: Duplicate ID'
+          puts ' 6: The clock is flow'
+          puts ' 7: The clock is full'
+          puts ' 8: Duplicate finger'
+          puts ' 9: Duplicated punch'
+          puts '10: Beep kuko'
+          puts '11: Beep siren'
+          puts '13: Beep bell'
+          puts '18: Windows(R) opening sound'
+          puts '20: Fingerprint not emolt'
+          puts '21: Password not emolt'
+          puts '22: Badges not emolt'
+          puts '23: Face not emolt'
+          puts '24: Beep standard'
+          puts '30: Invalid user'
+          puts '31: Invalid time period'
+          puts '32: Invalid combination'
+          puts '33: Illegal Access'
+          puts '34: Disk space full'
+          puts '35: Duplicate fingerprint'
+          puts '51: Focus eyes on the green box'
         end
 
         with_connection(ip, options) do |conn|
           puts "Testing device voice with index #{index}..."
           result = conn.test_voice(index)
-          puts "✓ Voice test successful!" if result
+          puts '✓ Voice test successful!' if result
         end
       end
 
-      desc "restart [IP]", "Restart the device"
+      desc 'restart [IP]', 'Restart the device'
 
       def restart(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
 
-        if yes?("Are you sure you want to restart the device? (y/N)")
+        if yes?('Are you sure you want to restart the device? (y/N)')
           with_connection(ip, options.merge(skip_disconnect_after_yield: true)) do |conn|
-            puts "Restarting device..."
+            puts 'Restarting device...'
             result = conn.restart
-            puts "✓ Device restart command sent successfully!" if result
-            puts "The device will restart now. You may need to wait a few moments before reconnecting."
+            puts '✓ Device restart command sent successfully!' if result
+            puts 'The device will restart now. You may need to wait a few moments before reconnecting.'
           end
         else
-          puts "Operation cancelled."
+          puts 'Operation cancelled.'
         end
       end
 
-      desc "poweroff [IP]", "Power off the device"
+      desc 'poweroff [IP]', 'Power off the device'
 
       def poweroff(ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
 
-        if yes?("Are you sure you want to power off the device? (y/N)")
+        if yes?('Are you sure you want to power off the device? (y/N)')
           with_connection(ip, options.merge(skip_disconnect_after_yield: true)) do |conn|
-            puts "Powering off device..."
+            puts 'Powering off device...'
             result = conn.poweroff
-            puts "✓ Device poweroff command sent successfully!" if result
-            puts "The device will power off now. You will need to manually power it back on."
+            puts '✓ Device poweroff command sent successfully!' if result
+            puts 'The device will power off now. You will need to manually power it back on.'
           end
         else
-          puts "Operation cancelled."
+          puts 'Operation cancelled.'
         end
       end
 
-      desc "config", "Show current configuration"
+      desc 'config', 'Show current configuration'
 
       def config
-        puts "RBZK Configuration"
-        puts "=================="
+        puts 'RBZK Configuration'
+        puts '=================='
         @config.to_h.each do |key, value|
           puts "#{key}: #{value}"
         end
       end
 
-      desc "config-set KEY VALUE", "Set a configuration value"
+      desc 'config-set KEY VALUE', 'Set a configuration value'
 
       def config_set(key, value)
         # Convert value to appropriate type
@@ -683,16 +687,16 @@ module RBZK
         puts "Configuration updated: #{key} = #{typed_value}"
       end
 
-      desc "config-reset", "Reset configuration to defaults"
+      desc 'config-reset', 'Reset configuration to defaults'
 
       def config_reset
-        if yes?("Are you sure you want to reset all configuration to defaults? (y/N)")
+        if yes?('Are you sure you want to reset all configuration to defaults? (y/N)')
           FileUtils.rm_f(@config.config_file)
           @config = RBZK::CLI::Config.new
-          puts "Configuration reset to defaults."
+          puts 'Configuration reset to defaults.'
           invoke :config
         else
-          puts "Operation cancelled."
+          puts 'Operation cancelled.'
         end
       end
 
@@ -708,7 +712,7 @@ module RBZK
         skip_disconnect = local_opts.delete(:skip_disconnect_after_yield) || false
 
         puts "Connecting to ZKTeco device at #{ip}:#{local_opts[:port] || @config['port'] || 4370}..." # Use local_opts
-        puts "Please ensure the device is powered on and connected to the network."
+        puts 'Please ensure the device is powered on and connected to the network.'
 
         conn = nil # Initialize conn for safety in ensure block
         begin
@@ -727,29 +731,30 @@ module RBZK
           conn = zk.connect
 
           if conn.connected?
-            puts "✓ Connected successfully!" unless local_opts[:quiet] # Use local_opts
+            puts '✓ Connected successfully!' unless local_opts[:quiet] # Use local_opts
             yield conn if block_given?
           else
-            puts "✗ Failed to connect to device."
+            puts '✗ Failed to connect to device.'
           end
         rescue RBZK::ZKNetworkError => e
           puts "✗ Network Error: #{e.message}"
-          puts "Please check the IP address and ensure the device is reachable."
+          puts 'Please check the IP address and ensure the device is reachable.'
         rescue RBZK::ZKErrorResponse => e
           puts "✗ Device Error: #{e.message}"
-          puts "The device returned an error response."
-        rescue => e
+          puts 'The device returned an error response.'
+        rescue StandardError => e
           puts "✗ Unexpected Error: #{e.message}"
-          puts "An unexpected error occurred while communicating with the device."
+          puts 'An unexpected error occurred while communicating with the device.'
           puts e.backtrace.join("\n") if local_opts[:verbose] # Use local_opts
         ensure
           if conn && conn.connected?
             if skip_disconnect
-              puts "Skipping disconnect as device is undergoing restart/poweroff." unless local_opts[:quiet] # Use local_opts
+              # Use local_opts
+              puts 'Skipping disconnect as device is undergoing restart/poweroff.' unless local_opts[:quiet]
             else
-              puts "Disconnecting from device..." unless local_opts[:quiet] # Use local_opts
+              puts 'Disconnecting from device...' unless local_opts[:quiet] # Use local_opts
               conn.disconnect
-              puts "✓ Disconnected" unless local_opts[:quiet] # Use local_opts
+              puts '✓ Disconnected' unless local_opts[:quiet] # Use local_opts
             end
           end
         end
@@ -761,8 +766,8 @@ module RBZK
 
           # Use Terminal::Table for pretty output
           table = ::Terminal::Table.new do |t|
-            t.title = "Users"
-            t.headings = [ 'UID', 'User ID', 'Name', 'Privilege', 'Password', 'Group ID', 'Card' ]
+            t.title = 'Users'
+            t.headings = ['UID', 'User ID', 'Name', 'Privilege', 'Password', 'Group ID', 'Card']
 
             users.each do |user|
               t << [
@@ -770,7 +775,7 @@ module RBZK
                 user.user_id,
                 user.name,
                 format_privilege(user.privilege),
-                (user.password.nil? || user.password.empty?) ? '(none)' : '(set)',
+                user.password.nil? || user.password.empty? ? '(none)' : '(set)',
                 user.group_id,
                 user.card
               ]
@@ -779,7 +784,7 @@ module RBZK
 
           puts table
         else
-          puts "✓ No users found"
+          puts '✓ No users found'
         end
       end
 
@@ -799,32 +804,30 @@ module RBZK
           log.timestamp >= start_datetime && log.timestamp <= end_datetime
         end
 
-        if options[:verbose]
-          puts "Filtered logs: #{filtered_logs.size} of #{logs.size}"
-        end
+        puts "Filtered logs: #{filtered_logs.size} of #{logs.size}" if options[:verbose]
 
         filtered_logs
       end
 
       def format_status(status)
         case status
-        when 0 then "Check In"
-        when 1 then "Check Out"
-        when 2 then "Break Out"
-        when 3 then "Break In"
-        when 4 then "Overtime In"
-        when 5 then "Overtime Out"
+        when 0 then 'Check In'
+        when 1 then 'Check Out'
+        when 2 then 'Break Out'
+        when 3 then 'Break In'
+        when 4 then 'Overtime In'
+        when 5 then 'Overtime Out'
         else "Unknown (#{status})"
         end
       end
 
       def format_privilege(privilege)
         case privilege
-        when 0 then "User"
-        when 1 then "Enroller"
-        when 2 then "Manager"
-        when 3 then "Administrator"
-        when 14 then "Super Admin"
+        when 0 then 'User'
+        when 1 then 'Enroller'
+        when 2 then 'Manager'
+        when 3 then 'Administrator'
+        when 14 then 'Super Admin'
         else "Unknown (#{privilege})"
         end
       end
