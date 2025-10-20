@@ -153,14 +153,16 @@ module RBZK
               # Pretty table output
               table = ::Terminal::Table.new do |t|
                 t.title = 'All Attendance Logs (Showing All Records)'
-                t.headings = ['User ID', 'Time', 'Status']
+                t.headings = ['UID', 'User ID', 'Time', 'Status', 'Punch Type']
 
                 # Show all logs in the table
                 logs.each do |log|
                   t << [
+                    log.uid,
                     log.user_id,
                     log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-                    format_status(log.status)
+                    log.status,
+                    log.punch_name
                   ]
                 end
               end
@@ -169,7 +171,7 @@ module RBZK
             else
               # Fallback plain text output
               logs.each do |log|
-                puts "  User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}"
+                puts "  UID: #{log.uid}, User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}, Punch: #{log.punch_name}"
               end
             end
           else
@@ -296,14 +298,16 @@ module RBZK
               # Pretty table output
               table = ::Terminal::Table.new do |t|
                 t.title = title || 'Attendance Logs'
-                t.headings = ['User ID', 'Time', 'Status']
+                t.headings = ['UID', 'User ID', 'Time', 'Status', 'Punch Type']
 
                 # Show logs in the table based on limit
                 display_logs.each do |log|
                   t << [
+                    log.uid,
                     log.user_id,
                     log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-                    format_status(log.status)
+                    log.status.to_s,
+                    log.punch_name
                   ]
                 end
               end
@@ -317,7 +321,7 @@ module RBZK
             else
               # Fallback plain text output
               display_logs.each do |log|
-                puts "  User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}"
+                puts "  UID: #{log.uid}, User ID: #{log.user_id}, Time: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}, Status: #{format_status(log.status)}, Punch: #{log.punch_name}"
               end
 
               puts "  ... and #{logs.size - display_logs.size} more records" if logs.size > display_logs.size
@@ -807,18 +811,6 @@ module RBZK
         puts "Filtered logs: #{filtered_logs.size} of #{logs.size}" if options[:verbose]
 
         filtered_logs
-      end
-
-      def format_status(status)
-        case status
-        when 0 then 'Check In'
-        when 1 then 'Check Out'
-        when 2 then 'Break Out'
-        when 3 then 'Break In'
-        when 4 then 'Overtime In'
-        when 5 then 'Overtime Out'
-        else "Unknown (#{status})"
-        end
       end
 
       def format_privilege(privilege)

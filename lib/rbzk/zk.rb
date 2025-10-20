@@ -39,13 +39,15 @@ module RBZK
         rescue Errno::EISCONN
           result = 0 # Already connected
         rescue => e
-          result = e.errno || 1 # Connection failed
+          # Some exceptions (e.g., Socket::ResolutionError) don't provide errno
+          result = e.respond_to?(:errno) ? e.errno : 1 # Connection failed
         end
 
         client.close
         return result
       rescue => e
-        return e.errno || 1
+        # Some exceptions (e.g., Socket::ResolutionError) don't provide errno
+        return e.respond_to?(:errno) ? e.errno : 1
       end
     end
   end

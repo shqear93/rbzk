@@ -229,7 +229,7 @@ else
     # Status: Check-in, Check-out, etc. (Refer to ZK documentation for specific status codes)
     puts "  Status: #{log.status}"
     # Punch: Fingerprint, Password, Card, etc. (Refer to ZK documentation)
-    puts "  Punch Type: #{log.punch}"
+    puts "  Punch Type: #{log.punch_name}"
     puts "  Timestamp: #{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
     puts "---"
   end
