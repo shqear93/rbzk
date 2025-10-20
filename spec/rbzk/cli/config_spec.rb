@@ -25,9 +25,9 @@ RSpec.describe RBZK::CLI::Config do
       # Create a test config file
       File.open(config_file, 'w') do |f|
         f.write(YAML.dump({
-          'ip' => '192.168.1.100',
-          'port' => 4371
-        }))
+                            'ip' => '192.168.1.100',
+                            'port' => 4371
+                          }))
       end
 
       # Create a new config object

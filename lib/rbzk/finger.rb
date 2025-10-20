@@ -4,7 +4,7 @@ module RBZK
   class Finger
     attr_accessor :uid, :fid, :valid, :template, :size
 
-    def initialize(uid, fid, valid, template = "")
+    def initialize(uid, fid, valid, template = '')
       @uid = uid
       @fid = fid
       @valid = valid

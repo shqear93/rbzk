@@ -2,7 +2,7 @@
 
 module RBZK
   module Constants
-    USHRT_MAX = 65535
+    USHRT_MAX = 65_535
 
     # Command codes
     CMD_DB_RRQ = 7 # Read in some kind of data from the machine
@@ -121,8 +121,8 @@ module RBZK
     # Machine constants
     # These values are in little-endian format when packed
     # 0x5050 = 'PP' in ASCII when packed as '<H'
-    MACHINE_PREPARE_DATA_1 = 20560 # 0x5050 = 'P' + 'P'*256 in little-endian
+    MACHINE_PREPARE_DATA_1 = 20_560 # 0x5050 = 'P' + 'P'*256 in little-endian
     # 0x7D82 = 0x827D in little-endian format
-    MACHINE_PREPARE_DATA_2 = 32130 # 0x7D82
+    MACHINE_PREPARE_DATA_2 = 32_130 # 0x7D82
   end
 end

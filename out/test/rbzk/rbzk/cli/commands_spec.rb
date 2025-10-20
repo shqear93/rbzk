@@ -16,15 +16,15 @@ RSpec.describe RBZK::CLI::Commands do
     allow(config).to receive(:[]).with('no_ping').and_return(true)
     allow(config).to receive(:[]).with('encoding').and_return('UTF-8')
     allow(config).to receive(:to_h).and_return({
-      'ip' => '192.168.100.201',
-      'port' => 4370,
-      'timeout' => 30,
-      'password' => 0,
-      'verbose' => false,
-      'force_udp' => false,
-      'no_ping' => true,
-      'encoding' => 'UTF-8'
-    })
+                                                 'ip' => '192.168.100.201',
+                                                 'port' => 4370,
+                                                 'timeout' => 30,
+                                                 'password' => 0,
+                                                 'verbose' => false,
+                                                 'force_udp' => false,
+                                                 'no_ping' => true,
+                                                 'encoding' => 'UTF-8'
+                                               })
   end
 
   describe '#config' do
@@ -138,47 +138,47 @@ RSpec.describe RBZK::CLI::Commands do
     it 'creates a User object and calls set_user with its attributes' do
       # Set up command line options
       allow(cli).to receive(:options).and_return({
-        uid: 42,
-        name: "Test User",
-        privilege: 0,
-        password: "1234",
-        group_id: "Group1",
-        user_id: "EMP123",
-        card: 987654321
-      })
+                                                   uid: 42,
+                                                   name: 'Test User',
+                                                   privilege: 0,
+                                                   password: '1234',
+                                                   group_id: 'Group1',
+                                                   user_id: 'EMP123',
+                                                   card: 987_654_321
+                                                 })
 
       # Call the method
-      expect { cli.add_user('192.168.100.201') }.to output(/Adding\/updating user/).to_stdout
+      expect { cli.add_user('192.168.100.201') }.to output(%r{Adding/updating user}).to_stdout
 
       # Verify that set_user was called with the correct parameters
       expect(conn).to have_received(:set_user).with(
         uid: 42,
-        name: "Test User",
+        name: 'Test User',
         privilege: 0,
-        password: "1234",
-        group_id: "Group1",
-        user_id: "EMP123",
-        card: 987654321
+        password: '1234',
+        group_id: 'Group1',
+        user_id: 'EMP123',
+        card: 987_654_321
       )
     end
 
     it 'handles missing parameters by using default values' do
       # Set up command line options with minimal parameters
       allow(cli).to receive(:options).and_return({
-        name: "Minimal User"
-      })
+                                                   name: 'Minimal User'
+                                                 })
 
       # Call the method
-      expect { cli.add_user('192.168.100.201') }.to output(/Adding\/updating user/).to_stdout
+      expect { cli.add_user('192.168.100.201') }.to output(%r{Adding/updating user}).to_stdout
 
       # Verify that set_user was called with the correct parameters
       expect(conn).to have_received(:set_user).with(
         uid: nil,
-        name: "Minimal User",
+        name: 'Minimal User',
         privilege: 0,
-        password: "",
-        group_id: "",
-        user_id: "",
+        password: '',
+        group_id: '',
+        user_id: '',
         card: 0
       )
     end
@@ -195,9 +195,9 @@ RSpec.describe RBZK::CLI::Commands do
     it 'calls delete_user with the uid parameter' do
       # Set up command line options
       allow(cli).to receive(:options).and_return({
-        uid: 42,
-        user_id: "EMP123"
-      })
+                                                   uid: 42,
+                                                   user_id: 'EMP123'
+                                                 })
 
       # Call the method
       expect { cli.delete_user('192.168.100.201') }.to output(/Deleting user/).to_stdout
@@ -211,12 +211,12 @@ RSpec.describe RBZK::CLI::Commands do
     it 'looks up the uid when only user_id is provided' do
       # Set up command line options
       allow(cli).to receive(:options).and_return({
-        uid: nil,
-        user_id: "EMP123"
-      })
+                                                   uid: nil,
+                                                   user_id: 'EMP123'
+                                                 })
 
       # Mock the get_users method to return a user with the given user_id
-      user = instance_double(RBZK::User, uid: 42, user_id: "EMP123")
+      user = instance_double(RBZK::User, uid: 42, user_id: 'EMP123')
       allow(conn).to receive(:get_users).and_return([user])
 
       # Call the method
@@ -241,10 +241,10 @@ RSpec.describe RBZK::CLI::Commands do
     it 'creates a User object and calls get_user_template with its attributes' do
       # Set up command line options
       allow(cli).to receive(:options).and_return({
-        uid: 42,
-        user_id: "EMP123",
-        finger_id: 1
-      })
+                                                   uid: 42,
+                                                   user_id: 'EMP123',
+                                                   finger_id: 1
+                                                 })
 
       # Call the method
       expect { cli.get_user_template('192.168.100.201') }.to output(/Getting user fingerprint template/).to_stdout
@@ -253,9 +253,8 @@ RSpec.describe RBZK::CLI::Commands do
       expect(conn).to have_received(:get_user_template).with(
         uid: 42,
         temp_id: 1,
-        user_id: "EMP123"
+        user_id: 'EMP123'
       )
     end
   end
-
 end

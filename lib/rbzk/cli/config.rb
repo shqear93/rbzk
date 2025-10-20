@@ -42,7 +42,7 @@ module RBZK
       def save
         # Create the directory if it doesn't exist
         FileUtils.mkdir_p(File.dirname(@config_file))
-        
+
         # Save the configuration
         File.open(@config_file, 'w') do |f|
           f.write(YAML.dump(@config))
@@ -68,7 +68,7 @@ module RBZK
           begin
             config = YAML.load_file(@config_file)
             return DEFAULT_CONFIG.merge(config) if config.is_a?(Hash)
-          rescue => e
+          rescue StandardError => e
             warn "Error loading configuration file: #{e.message}"
           end
         end

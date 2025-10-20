@@ -7,33 +7,33 @@ module BinaryCompatibilityHelpers
   def python_format(binary_string)
     result = "b'"
     binary_string.each_byte do |byte|
-      case byte
-      when 0x0d # Carriage return - Python shows as \r
-        result += "\\r"
-      when 0x0a # Line feed - Python shows as \n
-        result += "\\n"
-      when 0x09 # Tab - Python shows as \t
-        result += "\\t"
-      when 0x07 # Bell - Python can show as \a or \x07
-        result += "\\x07"
-      when 0x08 # Backspace - Python shows as \b
-        result += "\\b"
-      when 0x0c # Form feed - Python shows as \f
-        result += "\\f"
-      when 0x0b # Vertical tab - Python shows as \v
-        result += "\\v"
-      when 0x5c # Backslash - Python shows as \\
-        result += "\\\\"
-      when 0x27 # Single quote - Python shows as \'
-        result += "\\'"
-      when 0x22 # Double quote - Python shows as \"
-        result += "\\\""
-      when 32..126 # Printable ASCII
-        result += byte.chr
-      else
-        # All other bytes - Python shows as \xHH
-        result += "\\x#{byte.to_s(16).rjust(2, '0')}"
-      end
+      result += case byte
+                when 0x0d # Carriage return - Python shows as \r
+                  '\\r'
+                when 0x0a # Line feed - Python shows as \n
+                  '\\n'
+                when 0x09 # Tab - Python shows as \t
+                  '\\t'
+                when 0x07 # Bell - Python can show as \a or \x07
+                  '\\x07'
+                when 0x08 # Backspace - Python shows as \b
+                  '\\b'
+                when 0x0c # Form feed - Python shows as \f
+                  '\\f'
+                when 0x0b # Vertical tab - Python shows as \v
+                  '\\v'
+                when 0x5c # Backslash - Python shows as \\
+                  '\\\\'
+                when 0x27 # Single quote - Python shows as \'
+                  "\\'"
+                when 0x22 # Double quote - Python shows as \"
+                  '\"'
+                when 32..126 # Printable ASCII
+                  byte.chr
+                else
+                  # All other bytes - Python shows as \xHH
+                  "\\x#{byte.to_s(16).rjust(2, '0')}"
+                end
     end
     result += "'"
     result
@@ -43,7 +43,7 @@ module BinaryCompatibilityHelpers
   def create_binary_header(command, session_id, reply_id, command_string)
     # For specific session_ids that need exact byte representation
     case session_id
-    when 13838
+    when 13_838
       # Pack command and zeros (4 bytes)
       header = [command, 0].pack('v2')
       # Use the exact bytes from Python for session_id=13838 and reply_id=3
@@ -74,7 +74,7 @@ module BinaryCompatibilityHelpers
     puts "\nByte-by-byte comparison#{suffix}:"
     expected_bytes.each_with_index do |byte, i|
       a = actual_bytes[i] || 'N/A'
-      match = byte == a ? "✓" : "✗"
+      match = byte == a ? '✓' : '✗'
       puts "Byte #{i.to_s.rjust(2)}: Expected=0x#{byte.to_s(16).rjust(2, '0')} | " +
            "Actual=0x#{a.to_s(16).rjust(2, '0')} #{match}"
     end
@@ -91,7 +91,7 @@ module BinaryCompatibilityHelpers
   # Verify binary compatibility
   def verify_binary_compatibility(command, session_id, reply_id, command_string, expected_output, test_name = '')
     actual_output = create_binary_header(command, session_id, reply_id, command_string)
-    matches = display_binary_comparison(expected_output, actual_output, test_name)
+    display_binary_comparison(expected_output, actual_output, test_name)
     expect(actual_output).to eq(expected_output)
   end
 end
