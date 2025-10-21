@@ -14,48 +14,45 @@ module RBZK
     end
 
     def test_ping
-      begin
-        Timeout.timeout(5) do
-          s = TCPSocket.new(@ip, @port)
-          s.close
-          return true
-        end
-      rescue Timeout::Error, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SocketError => e
-        return false
-      rescue => e
-        return false
+      Timeout.timeout(5) do
+        s = TCPSocket.new(@ip, @port)
+        s.close
+        return true
       end
+    rescue Timeout::Error, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SocketError
+      false
+    rescue StandardError
+      false
     end
 
     def test_tcp
+      client = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
+      client.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [ 10, 0 ].pack('l_*'))
+
+      sockaddr = Socket.pack_sockaddr_in(@port, @ip)
       begin
-        client = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
-        client.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [ 10, 0 ].pack('l_*'))
-
-        sockaddr = Socket.pack_sockaddr_in(@port, @ip)
-        begin
-          client.connect(sockaddr)
-          result = 0 # Success code
-        rescue Errno::EISCONN
-          result = 0 # Already connected
-        rescue => e
-          # Some exceptions (e.g., Socket::ResolutionError) don't provide errno
-          result = e.respond_to?(:errno) ? e.errno : 1 # Connection failed
-        end
-
-        client.close
-        return result
-      rescue => e
+        client.connect(sockaddr)
+        result = 0 # Success code
+      rescue Errno::EISCONN
+        result = 0 # Already connected
+      rescue StandardError => e
         # Some exceptions (e.g., Socket::ResolutionError) don't provide errno
-        return e.respond_to?(:errno) ? e.errno : 1
+        result = e.respond_to?(:errno) ? e.errno : 1 # Connection failed
       end
+
+      client.close
+      result
+    rescue StandardError => e
+      # Some exceptions (e.g., Socket::ResolutionError) don't provide errno
+      e.respond_to?(:errno) ? e.errno : 1
     end
   end
 
   class ZK
     include RBZK::Constants
 
-    def initialize(ip, port: 4370, timeout: 60, password: 0, force_udp: false, omit_ping: false, verbose: false, encoding: 'UTF-8')
+    def initialize(ip, port: 4370, timeout: 60, password: 0, force_udp: false, omit_ping: false, verbose: false,
+                   encoding: 'UTF-8')
       # Initialize the ZK device connection
       RBZK::User.encoding = encoding
       @address = [ ip, port ]
@@ -79,6 +76,8 @@ module RBZK
       @data = nil
       @connected = false
       @next_uid = 1
+      @next_user_id = '1'
+      @user_packet_size = 28
 
       # Storage for user and attendance data
       @users = {}
@@ -104,22 +103,20 @@ module RBZK
       # Create helper for ping and TCP tests
       @helper = ZKHelper.new(ip, port)
 
-      if @verbose
-        puts "ZK instance created for device at #{@ip}:#{@port}"
-        puts "Using #{@force_udp ? 'UDP' : 'TCP'} mode"
-      end
+      return unless @verbose
+
+      puts "ZK instance created for device at #{@ip}:#{@port}"
+      puts "Using #{@force_udp ? 'UDP' : 'TCP'} mode"
     end
 
     def connect
       return self if @connected
 
       # Skip ping check if requested
-      if !@omit_ping && !@helper.test_ping
-        raise RBZK::ZKNetworkError, "Can't reach device (ping #{@ip})"
-      end
+      raise RBZK::ZKNetworkError, "Can't reach device (ping #{@ip})" if !@omit_ping && !@helper.test_ping
 
       # Set user packet size if TCP connection is available
-      if !@force_udp && @helper.test_tcp == 0
+      if !@force_udp && @helper.test_tcp.zero?
         @user_packet_size = 72 # Default for ZK8
       end
 
@@ -129,9 +126,7 @@ module RBZK
       @session_id = 0
       @reply_id = USHRT_MAX - 1
 
-      if @verbose
-        puts "Sending connect command to device"
-      end
+      puts 'Sending connect command to device' if @verbose
 
       begin
         cmd_response = send_command(CMD_CONNECT)
@@ -139,9 +134,7 @@ module RBZK
 
         # Authenticate if needed
         if cmd_response[:code] == CMD_ACK_UNAUTH
-          if @verbose
-            puts "try auth"
-          end
+          puts 'try auth' if @verbose
 
           command_string = make_commkey(@password, @session_id)
           cmd_response = send_command(CMD_AUTH, command_string)
@@ -150,23 +143,17 @@ module RBZK
         # Check response status
         if cmd_response[:status]
           @connected = true
-          return self
+          self
         else
-          if cmd_response[:code] == CMD_ACK_UNAUTH
-            raise RBZK::ZKErrorResponse, "Unauthenticated"
-          end
+          raise RBZK::ZKErrorResponse, 'Unauthenticated' if cmd_response[:code] == CMD_ACK_UNAUTH
 
-          if @verbose
-            puts "Connect error response: #{cmd_response[:code]}"
-          end
+          puts "Connect error response: #{cmd_response[:code]}" if @verbose
 
           raise RBZK::ZKErrorResponse, "Invalid response: Can't connect"
         end
-      rescue => e
+      rescue StandardError => e
         @connected = false
-        if @verbose
-          puts "Connection error: #{e.message}"
-        end
+        puts "Connection error: #{e.message}" if @verbose
         raise e
       end
     end
@@ -182,7 +169,7 @@ module RBZK
       recv_reply
 
       @connected = false
-      @socket.close if @socket
+      @socket&.close
 
       @socket = nil
       @tcp = nil
@@ -197,13 +184,11 @@ module RBZK
     end
 
     def disable_device
-      cmd_response = self.send_command(CMD_DISABLEDEVICE)
-      if cmd_response[:status]
-        @is_enabled = false
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't disable device"
-      end
+      cmd_response = send_command(CMD_DISABLEDEVICE)
+      raise RBZK::ZKErrorResponse, "Can't disable device" unless cmd_response[:status]
+
+      @is_enabled = false
+      true
     end
 
     def get_firmware_version
@@ -211,12 +196,10 @@ module RBZK
       response_size = 1024
       response = send_command(command, '', response_size)
 
-      if response && response[:status]
-        firmware_version = @data.split("\x00")[0]
-        firmware_version.to_s
-      else
-        raise RBZK::ZKErrorResponse, "Can't read firmware version"
-      end
+      raise RBZK::ZKErrorResponse, "Can't read firmware version" unless response && response[:status]
+
+      firmware_version = @data.split("\x00")[0]
+      firmware_version.to_s
     end
 
     def get_serialnumber
@@ -226,13 +209,12 @@ module RBZK
 
       response = send_command(command, command_string, response_size)
 
-      if response && response[:status]
-        serialnumber = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        serialnumber = serialnumber.gsub("=", "")
-        serialnumber.to_s
-      else
-        raise RBZK::ZKErrorResponse, "Can't read serial number"
-      end
+      raise RBZK::ZKErrorResponse, "Can't read serial number" unless response && response[:status]
+
+      serialnumber_field = @data.split('=', 2)[1]
+      serialnumber = serialnumber_field ? serialnumber_field.split("\x00")[0] : ''
+      serialnumber = serialnumber.gsub('=', '')
+      serialnumber.to_s
     end
 
     def get_mac
@@ -242,12 +224,10 @@ module RBZK
 
       response = send_command(command, command_string, response_size)
 
-      if response && response[:status]
-        mac = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        mac.to_s
-      else
-        raise RBZK::ZKErrorResponse, "Can't read MAC address"
-      end
+      raise RBZK::ZKErrorResponse, "Can't read MAC address" unless response && response[:status]
+
+      mac = @data.split('=', 2)[1]&.split("\x00")&.[](0) || ''
+      mac.to_s
     end
 
     def get_device_name
@@ -258,7 +238,8 @@ module RBZK
       response = send_command(command, command_string, response_size)
 
       if response && response[:status]
-        device = @data.split("=", 2)[1]&.split("\x00")[0] || ""
+        device_field = @data.split('=', 2)[1]
+        device = device_field ? device_field.split("\x00")[0] : ''
         device.to_s
       else
         ''
@@ -272,11 +253,14 @@ module RBZK
 
       response = send_command(command, command_string, response_size)
 
-      if response && response[:status]
-        version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        version.to_i rescue 0
-      else
-        nil
+      return unless response && response[:status]
+
+      version_field = @data.split('=', 2)[1]
+      version = version_field ? version_field.split("\x00")[0] : ''
+      begin
+        version.to_i
+      rescue StandardError
+        0
       end
     end
 
@@ -287,11 +271,14 @@ module RBZK
 
       response = send_command(command, command_string, response_size)
 
-      if response && response[:status]
-        fmt = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        fmt.to_i rescue 0
-      else
-        nil
+      return unless response && response[:status]
+
+      fmt_field = @data.split('=', 2)[1]
+      fmt = fmt_field ? fmt_field.split("\x00")[0] : ''
+      begin
+        fmt.to_i
+      rescue StandardError
+        0
       end
     end
 
@@ -302,13 +289,12 @@ module RBZK
 
       response = send_command(command, command_string, response_size)
 
-      if response && response[:status]
-        platform = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        platform = platform.gsub("=", "")
-        platform.to_s
-      else
-        raise RBZK::ZKErrorResponse, "Can't read platform name"
-      end
+      raise RBZK::ZKErrorResponse, "Can't read platform name" unless response && response[:status]
+
+      platform_field = @data.split('=', 2)[1]
+      platform = platform_field ? platform_field.split("\x00")[0] : ''
+      platform = platform.gsub('=', '')
+      platform.to_s
     end
 
     def get_fp_version
@@ -318,12 +304,15 @@ module RBZK
 
       response = send_command(command, command_string, response_size)
 
-      if response && response[:status]
-        version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
-        version = version.gsub("=", "")
-        version.to_i rescue 0
-      else
-        raise RBZK::ZKErrorResponse, "Can't read fingerprint version"
+      raise RBZK::ZKErrorResponse, "Can't read fingerprint version" unless response && response[:status]
+
+      version_field = @data.split('=', 2)[1]
+      version = version_field ? version_field.split("\x00")[0] : ''
+      version = version.gsub('=', '')
+      begin
+        version.to_i
+      rescue StandardError
+        0
       end
     end
 
@@ -357,11 +346,9 @@ module RBZK
       command_string = [ time * 10 ].pack('L<')
       response = send_command(CMD_UNLOCK, command_string)
 
-      if response && response[:status]
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't open door"
-      end
+      raise RBZK::ZKErrorResponse, "Can't open door" unless response && response[:status]
+
+      true
     end
 
     # Get the lock state
@@ -381,14 +368,12 @@ module RBZK
     # @param text [String] text to write
     # @return [Boolean] true if successful, raises exception otherwise
     def write_lcd(line_number, text)
-      command_string = [line_number, 0].pack('s<c') + ' ' + text.encode(@encoding, invalid: :replace, undef: :replace)
-      response = self.send_command(CMD_WRITE_LCD, command_string)
+      command_string = "#{[ line_number, 0 ].pack('s<c')} #{text.encode(@encoding, invalid: :replace, undef: :replace)}"
+      response = send_command(CMD_WRITE_LCD, command_string)
 
-      if response && response[:status]
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't write lcd"
-      end
+      raise RBZK::ZKErrorResponse, "Can't write lcd" unless response && response[:status]
+
+      true
     end
 
     # Clear LCD
@@ -396,11 +381,9 @@ module RBZK
     def clear_lcd
       response = send_command(CMD_CLEAR_LCD)
 
-      if response && response[:status]
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't clear lcd"
-      end
+      raise RBZK::ZKErrorResponse, "Can't clear lcd" unless response && response[:status]
+
+      true
     end
 
     # Refresh the device data
@@ -408,11 +391,9 @@ module RBZK
     def refresh_data
       response = send_command(CMD_REFRESHDATA)
 
-      if response && response[:status]
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't refresh data"
-      end
+      raise RBZK::ZKErrorResponse, "Can't refresh data" unless response && response[:status]
+
+      true
     end
 
     # Create or update user by uid
@@ -425,7 +406,6 @@ module RBZK
     # @param card [Integer] card number
     # @return [Boolean] true if successful, raises exception otherwise
     def set_user(uid: nil, name: '', privilege: 0, password: '', group_id: '', user_id: '', card: 0)
-      # If uid is not provided, use next_uid
       if uid.nil?
         ensure_user_metadata!
         uid = @next_uid
@@ -516,10 +496,7 @@ module RBZK
 
     # Helper method to read data with buffer (ZK6: 1503)
     def read_with_buffer(command, fct = 0, ext = 0)
-
-      if @verbose
-        puts "Reading data with buffer: command=#{command}, fct=#{fct}, ext=#{ext}"
-      end
+      puts "Reading data with buffer: command=#{command}, fct=#{fct}, ext=#{ext}" if @verbose
 
       # Set max chunk size based on connection type
       max_chunk = @tcp ? 0xFFc0 : 16 * 1024
@@ -529,54 +506,39 @@ module RBZK
       # All in little-endian format
       command_string = [ 1, command, fct, ext ].pack('cs<l<l<')
 
-      if @verbose
-        puts "Command string: #{python_format(command_string)}"
-      end
+      puts "Command string: #{python_format(command_string)}" if @verbose
 
       # Send the command to prepare the buffer
       response_size = 1024
-      data = []
-      start = 0
-      response = self.send_command(CMD_PREPARE_BUFFER, command_string, response_size)
+      # local variables
+      response = send_command(CMD_PREPARE_BUFFER, command_string, response_size)
 
-      if !response || !response[:status]
-        raise RBZK::ZKErrorResponse, "Read with buffer not supported"
-      end
+      raise RBZK::ZKErrorResponse, 'Read with buffer not supported' if !response || !response[:status]
 
       # Get data from the response
       data = @data
 
-      if @verbose
-        puts "Received #{data.size} bytes of data"
-      end
+      puts "Received #{data.size} bytes of data" if @verbose
 
       # Check if we need more data
       if response[:code] == CMD_DATA
         if @tcp
-          if @verbose
-            puts "DATA! is #{data.size} bytes, tcp length is #{@tcp_length}"
-          end
+          puts "DATA! is #{data.size} bytes, tcp length is #{@tcp_length}" if @verbose
 
           if data.size < (@tcp_length - 8)
             need = (@tcp_length - 8) - data.size
-            if @verbose
-              puts "need more data: #{need}"
-            end
+            puts "need more data: #{need}" if @verbose
 
             # Receive more data to complete the buffer
             more_data = receive_raw_data(need)
 
-            if @verbose
-              puts "Read #{more_data.size} more bytes"
-            end
+            puts "Read #{more_data.size} more bytes" if @verbose
 
             # Combine the data
             result = data + more_data
             return result, data.size + more_data.size
           else
-            if @verbose
-              puts "Enough data"
-            end
+            puts 'Enough data' if @verbose
             size = data.size
             return data, size
           end
@@ -589,36 +551,28 @@ module RBZK
       # Get the size from the first 4 bytes (unsigned long, little-endian)
       size = data[1..4].unpack1('L<')
 
-      if @verbose
-        puts "size fill be #{size}"
-      end
+      puts "size fill be #{size}" if @verbose
 
       # Calculate chunks
       remain = size % max_chunk
       # Calculate number of full-sized packets (integer division)
       packets = (size - remain).div(max_chunk)
 
-      if @verbose
-        puts "rwb: ##{packets} packets of max #{max_chunk} bytes, and extra #{remain} bytes remain"
-      end
+      puts "rwb: ##{packets} packets of max #{max_chunk} bytes, and extra #{remain} bytes remain" if @verbose
 
       # Read chunks
       result_data = []
       start = 0
 
       packets.times do
-        if @verbose
-          puts "recieve chunk: prepare data size is #{max_chunk}"
-        end
+        puts "recieve chunk: prepare data size is #{max_chunk}" if @verbose
         chunk = read_chunk(start, max_chunk)
         result_data << chunk
         start += max_chunk
       end
 
-      if remain > 0
-        if @verbose
-          puts "recieve chunk: prepare data size is #{remain}"
-        end
+      if remain.positive?
+        puts "recieve chunk: prepare data size is #{remain}" if @verbose
         chunk = read_chunk(start, remain)
         result_data << chunk
         start += remain
@@ -627,9 +581,7 @@ module RBZK
       # Free data (equivalent to Python's self.free_data())
       free_data
 
-      if @verbose
-        puts "_read w/chunk #{start} bytes"
-      end
+      puts "_read w/chunk #{start} bytes" if @verbose
 
       # In Python: return b''.join(data), start
       result = result_data.join
@@ -639,8 +591,8 @@ module RBZK
     # Helper method to get data size from the current data
     def get_data_size
       if @data && @data.size >= 4
-        size = @data[0...4].unpack('L<')[0]
-        size
+        @data[0...4].unpack1('L<')
+
       else
         0
       end
@@ -696,11 +648,11 @@ module RBZK
 
           puts "resp complete len #{resp.size}" if @verbose
 
-          return resp, data_recv[(size + 16)..]
+          [ resp, data_recv[(size + 16)..-1] ]
         else
           puts "incorrect response!!! #{response}" if @verbose
 
-          return nil, "".b
+          [ nil, ''.b ]
         end
       else
         puts "try DATA incomplete (actual valid #{received - 16})" if @verbose
@@ -709,15 +661,13 @@ module RBZK
         size -= received - 16
         broken_header = ''.b
 
-        if size < 0
-          broken_header = data_recv[size..]
+        if size.negative?
+          broken_header = data_recv[size..-1]
 
-          if @verbose
-            puts "broken: #{broken_header.bytes.map { |b| format('%02x', b) }.join}"
-          end
+          puts "broken: #{broken_header.bytes.map { |b| format('%02x', b) }.join}" if @verbose
         end
 
-        if size > 0
+        if size.positive?
           data_recv = receive_raw_data(size)
           data << data_recv
         end
@@ -736,14 +686,14 @@ module RBZK
             need = (@tcp_length - 8) - @data.size
             puts "need more data: #{need}" if @verbose
             more_data = receive_raw_data(need)
-            return @data + more_data
+            @data + more_data
           else
-            puts "Enough data" if @verbose
-            return @data
+            puts 'Enough data' if @verbose
+            @data
           end
         else
           puts "_rc len is #{@data.size}" if @verbose
-          return @data
+          @data
         end
       elsif @response == CMD_PREPARE_DATA
         data = []
@@ -753,10 +703,10 @@ module RBZK
 
         if @tcp
           if @data.size >= (8 + size)
-            data_recv = @data[8..]
+            data_recv = @data[8..-1]
           else
             # [80, 80, 130, 125, 92, 7, 0, 0, 221, 5, 142, 172, 0, 0, 4, 0, 80, 7, 0, 0, 1, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 65, 98, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 2, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 65, 110, 97, 115, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 111, 110, 100, 111, 115, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 51, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 116, 97, 0, 111, 115, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 52, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 97, 121, 115, 0, 115, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 53, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 97, 119, 97, 110, 0, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 54, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 74, 101, 110, 97, 110, 0, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 55, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 70, 97, 114, 97, 104, 0, 44, 65, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 56, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 98, 114, 101, 101, 110, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 57, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 101, 101, 100, 0, 110, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 48, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 71, 111, 102, 114, 97, 110, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 49, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 68, 97, 110, 105, 97, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 50, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 109, 105, 97, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 51, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 101, 101, 109, 0, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 52, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 87, 97, 108, 97, 97, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 53, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 97, 110, 101, 101, 109, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 54, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 79, 108, 97, 0, 101, 109, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 55, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 97, 114, 97, 104, 0, 0, 0, 98, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 56, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 111, 110, 100, 111, 115, 72, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 57, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 111, 0, 100, 111, 115, 72, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 52, 53, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 119, 115, 0, 111, 115, 72, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 49, 52, 54, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 109, 97, 114, 97, 0, 65, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 52, 53, 50, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 97, 115, 110, 101, 101, 109, 0, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 48, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 69, 115, 114, 97, 97, 0, 109, 0, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 49, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 25, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 83, 97, 114, 97, 106, 0, 109, 0, 0, 117, 107, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 49, 51, 53, 0, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 108, 97, 97, 110, 97, 115, 115, 101, 114, 0, 104, 100, 97, 105, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 50, 50, 0, 53, 0, 0, 0, 0, 25, 0, 0, 0, 0, 254, 6, 119, 255, 255, 255, 255, 212, 10, 159, 127, 80, 80, 130, 125, 8, 0, 0, 0, 208, 7, 73, 81, 226, 166, 4, 0]
-            data_recv = @data[8..] + @socket.recv(size + 32)
+            data_recv = @data[8..-1] + @socket.recv(size + 32)
           end
 
           puts "data_recv: #{python_format(data_recv)}" if @verbose
@@ -766,24 +716,20 @@ module RBZK
           data << resp if resp
 
           # get CMD_ACK_OK
-          if broken_header.size < 16
-            data_recv = broken_header + @socket.recv(16)
-          else
-            data_recv = broken_header
-          end
+          data_recv = if broken_header.size < 16
+                        broken_header + @socket.recv(16)
+                      else
+                        broken_header
+                      end
 
           if data_recv.size < 16
             puts "trying to complete broken ACK #{data_recv.size} /16"
-            if @verbose
-              puts "data_recv: #{data_recv.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-            end
+            puts "data_recv: #{data_recv.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}" if @verbose
             data_recv += @socket.recv(16 - data_recv.size) # TODO: CHECK HERE_!
           end
 
-          if !test_tcp_top(data_recv)
-            if @verbose
-              puts "invalid chunk tcp ACK OK"
-            end
+          unless test_tcp_top(data_recv)
+            puts 'invalid chunk tcp ACK OK' if @verbose
             return nil
           end
 
@@ -793,9 +739,7 @@ module RBZK
           response = data_recv[8...16].unpack1('S<4')
 
           if response == CMD_ACK_OK
-            if @verbose
-              puts "chunk tcp ACK OK!"
-            end
+            puts 'chunk tcp ACK OK!' if @verbose
             return data.join
           end
 
@@ -804,40 +748,32 @@ module RBZK
             puts "data: #{data.map { |d| format_as_python_bytes(d) }.join(', ')}"
           end
 
-          return nil
+          nil
         else
           # Non-TCP implementation
           loop do
             data_recv = @socket.recv(1024 + 8)
             response = data_recv[0...8].unpack1('S<S<S<S<')
 
-            if @verbose
-              puts "# packet response is: #{response}"
-            end
+            puts "# packet response is: #{response}" if @verbose
 
             if response == CMD_DATA
-              data << data_recv[8..]
+              data << data_recv[8..-1]
               size -= 1024
             elsif response == CMD_ACK_OK
               break
             else
-              if @verbose
-                puts "broken!"
-              end
+              puts 'broken!' if @verbose
               break
             end
 
-            if @verbose
-              puts "still needs #{size}"
-            end
+            puts "still needs #{size}" if @verbose
           end
 
-          return data.join
+          data.join
         end
       else
-        if @verbose
-          puts "invalid response #{@response}"
-        end
+        puts "invalid response #{@response}" if @verbose
         nil
       end
     end
@@ -845,27 +781,21 @@ module RBZK
     # Helper method to receive raw data (like Python's __recieve_raw_data)
     def receive_raw_data(size)
       data = []
-      if @verbose
-        puts "expecting #{size} bytes raw data"
-      end
+      puts "expecting #{size} bytes raw data" if @verbose
 
-      while size > 0
+      while size.positive?
         data_recv = @socket.recv(size)
         received = data_recv.size
 
         if @verbose
           puts "partial recv #{received}"
-          if received < 100
-            puts "   recv #{data_recv.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-          end
+          puts "   recv #{data_recv.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}" if received < 100
         end
 
         data << data_recv
         size -= received
 
-        if @verbose
-          puts "still need #{size}"
-        end
+        puts "still need #{size}" if @verbose
       end
 
       data.join
@@ -876,11 +806,9 @@ module RBZK
       command = CMD_FREE_DATA
       response = send_command(command)
 
-      if response && response[:status]
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't free data"
-      end
+      raise RBZK::ZKErrorResponse, "Can't free data" unless response && response[:status]
+
+      true
     end
 
     # Send data with buffer
@@ -895,9 +823,7 @@ module RBZK
       command_string = [ size ].pack('L<')
       response = send_command(command, command_string)
 
-      if !response || !response[:status]
-        raise RBZK::ZKErrorResponse, "Can't prepare data"
-      end
+      raise RBZK::ZKErrorResponse, "Can't prepare data" if !response || !response[:status]
 
       remain = size % max_chunk
       packets = (size - remain) / max_chunk
@@ -908,7 +834,7 @@ module RBZK
         start += max_chunk
       end
 
-      send_chunk(buffer[start, remain]) if remain > 0
+      send_chunk(buffer[start, remain]) if remain.positive?
 
       true
     end
@@ -920,20 +846,16 @@ module RBZK
       command = CMD_DATA
       response = send_command(command, command_string)
 
-      if response && response[:status]
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't send chunk"
-      end
+      raise RBZK::ZKErrorResponse, "Can't send chunk" unless response && response[:status]
+
+      true
     end
 
     # Helper method to read a chunk of data
     def read_chunk(start, size)
-      if @verbose
-        puts "Reading chunk: start=#{start}, size=#{size}"
-      end
+      puts "Reading chunk: start=#{start}, size=#{size}" if @verbose
 
-      3.times do |_retries|
+      3.times do |attempt|
         # In Python: command = const._CMD_READ_BUFFER (which is 1504)
         # In Ruby, we should use CMD_READ_BUFFER (1504) instead of CMD_READFILE_DATA (81)
         command = 1504 # CMD_READ_BUFFER
@@ -948,22 +870,18 @@ module RBZK
         response = send_command(command, command_string, response_size)
 
         if !response || !response[:status]
-          if @verbose
-            puts "Failed to read chunk on attempt #{_retries + 1}"
-          end
+          puts "Failed to read chunk on attempt #{attempt + 1}" if @verbose
           next
         end
 
         # In Python: data = self.__recieve_chunk()
         data = receive_chunk
 
-        if data
-          if @verbose
-            puts "Received chunk of #{data.size} bytes"
-          end
+        next unless data
 
-          return data
-        end
+        puts "Received chunk of #{data.size} bytes" if @verbose
+
+        return data
       end
 
       # If we get here, all retries failed
@@ -977,7 +895,7 @@ module RBZK
       puts "Device has #{@users} users" if @verbose
 
       # If no users, return empty array
-      if @users == 0
+      if @users.zero?
         @next_uid = 1
         @next_user_id = '1'
         return []
@@ -996,35 +914,37 @@ module RBZK
       total_size = userdata[0, 4].unpack1('L<')
       @user_packet_size = total_size / @users
 
-      if ![ 28, 72 ].include?(@user_packet_size)
-        puts "WRN packet size would be #{@user_packet_size}" if @verbose
-      end
+      puts "WRN packet size would be #{@user_packet_size}" if ![ 28, 72 ].include?(@user_packet_size) && @verbose
 
       userdata = userdata[4..-1]
 
       if @user_packet_size == 28
         while userdata.length >= 28
-          uid, privilege, password, name, card, group_id, timezone, user_id = userdata.ljust(28, "\x00")[0, 28].unpack('S<Ca5a8L<xCs<L<')
+          uid, privilege, password, name, card, group_id, timezone, user_id = userdata.ljust(28, "\x00")[0,
+                                                                                                         28].unpack('S<Ca5a8L<xCs<L<')
           max_uid = uid if uid > max_uid
           password = password.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)
           name = name.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)&.strip
           group_id = group_id.to_s
           user_id = user_id.to_s
-          name = "NN-#{user_id}" if !name
+          name ||= "NN-#{user_id}"
           user = User.new(uid, name, privilege, password, group_id, user_id, card)
           users << user
-          puts "[6]user: #{uid}, #{privilege}, #{password}, #{name}, #{card}, #{group_id}, #{timezone}, #{user_id}" if @verbose
+          if @verbose
+            puts "[6]user: #{uid}, #{privilege}, #{password}, #{name}, #{card}, #{group_id}, #{timezone}, #{user_id}"
+          end
           userdata = userdata[28..-1]
         end
       else
         while userdata.length >= 72
-          uid, privilege, password, name, card, group_id, user_id = userdata.ljust(72, "\x00")[0, 72].unpack('S<Ca8a24L<xa7xa24')
+          uid, privilege, password, name, card, group_id, user_id = userdata.ljust(72, "\x00")[0,
+                                                                                               72].unpack('S<Ca8a24L<xa7xa24')
           max_uid = uid if uid > max_uid
           password = password.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)
           name = name.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)&.strip
           group_id = group_id.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)&.strip
           user_id = user_id.split("\x00").first&.force_encoding(@encoding)&.encode('UTF-8', invalid: :replace)
-          name = "NN-#{user_id}" if !name
+          name ||= "NN-#{user_id}"
           user = User.new(uid, name, privilege, password, group_id, user_id, card)
           users << user
           userdata = userdata[72..-1]
@@ -1036,12 +956,10 @@ module RBZK
       @next_user_id = max_uid.to_s
 
       loop do
-        if users.any? { |u| u.user_id == @next_user_id }
-          max_uid += 1
-          @next_user_id = max_uid.to_s
-        else
-          break
-        end
+        break unless users.any? { |u| u.user_id == @next_user_id }
+
+        max_uid += 1
+        @next_user_id = max_uid.to_s
       end
 
       users
@@ -1052,16 +970,12 @@ module RBZK
       read_sizes
 
       # If no records, return empty array
-      if @records == 0
-        return []
-      end
+      return [] if @records.zero?
 
       # Get users for lookup
       users = get_users
 
-      if @verbose
-        puts "Found #{users.size} users"
-      end
+      puts "Found #{users.size} users" if @verbose
 
       logs = []
 
@@ -1069,9 +983,7 @@ module RBZK
       attendance_data, size = read_with_buffer(CMD_ATTLOG_RRQ)
 
       if size < 4
-        if @verbose
-          puts "WRN: no attendance data"
-        end
+        puts 'WRN: no attendance data' if @verbose
         return []
       end
 
@@ -1079,11 +991,9 @@ module RBZK
       total_size = attendance_data[0...4].unpack1('I')
 
       # Calculate record size
-      record_size = @records > 0 ? total_size / @records : 0
+      record_size = @records.positive? ? total_size / @records : 0
 
-      if @verbose
-        puts "record_size is #{record_size}"
-      end
+      puts "record_size is #{record_size}" if @verbose
 
       # Remove the first 4 bytes (total size)
       attendance_data = attendance_data[4..-1]
@@ -1095,18 +1005,20 @@ module RBZK
           uid, status, timestamp_raw, punch = attendance_data[0...8].ljust(8, "\x00".b).unpack('S<C4sC')
 
           if @verbose
-            puts "Attendance data (hex): #{attendance_data[0...8].bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+            puts "Attendance data (hex): #{attendance_data[0...8].bytes.map do |b|
+              "0x#{b.to_s(16).rjust(2, '0')}"
+            end.join(' ')}"
           end
 
           attendance_data = attendance_data[8..-1]
 
           # Look up user by uid
           tuser = users.find { |u| u.uid == uid }
-          if !tuser
-            user_id = uid.to_s
-          else
-            user_id = tuser.user_id
-          end
+          user_id = if !tuser
+                      uid.to_s
+                    else
+                      tuser.user_id
+                    end
 
           # Decode timestamp
           timestamp = decode_time(timestamp_raw)
@@ -1119,10 +1031,13 @@ module RBZK
         # Handle 16-byte records
         while attendance_data && attendance_data.size >= 16
           # In Python: user_id, timestamp, status, punch, reserved, workcode = unpack('<I4sBB2sI', attendance_data.ljust(16, b'\x00')[:16])
-          user_id_raw, timestamp_raw, status, punch, reserved, workcode = attendance_data[0...16].ljust(16, "\x00".b).unpack('L<4sCCa2L<')
+          user_id_raw, timestamp_raw, status, punch, _reserved, _workcode = attendance_data[0...16].ljust(16,
+                                                                                                          "\x00".b).unpack('L<4sCCa2L<')
 
           if @verbose
-            puts "Attendance data (hex): #{attendance_data[0...16].bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+            puts "Attendance data (hex): #{attendance_data[0...16].bytes.map do |b|
+              "0x#{b.to_s(16).rjust(2, '0')}"
+            end.join(' ')}"
           end
 
           attendance_data = attendance_data[16..-1]
@@ -1133,9 +1048,7 @@ module RBZK
           # Look up user by user_id and uid
           tuser = users.find { |u| u.user_id == user_id }
           if !tuser
-            if @verbose
-              puts "no uid #{user_id}"
-            end
+            puts "no uid #{user_id}" if @verbose
             uid = user_id
             tuser = users.find { |u| u.uid.to_s == user_id }
             if !tuser
@@ -1159,10 +1072,13 @@ module RBZK
         # Handle 40-byte records (default)
         while attendance_data && attendance_data.size >= 40
           # In Python: uid, user_id, status, timestamp, punch, space = unpack('<H24sB4sB8s', attendance_data.ljust(40, b'\x00')[:40])
-          uid, user_id_raw, status, timestamp_raw, punch, space = attendance_data[0...40].ljust(40, "\x00".b).unpack('S<a24Ca4Ca8')
+          uid, user_id_raw, status, timestamp_raw, punch, _space = attendance_data[0...40].ljust(40,
+                                                                                                 "\x00".b).unpack('S<a24Ca4Ca8')
 
           if @verbose
-            puts "Attendance data (hex): #{attendance_data[0...40].bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+            puts "Attendance data (hex): #{attendance_data[0...40].bytes.map do |b|
+              "0x#{b.to_s(16).rjust(2, '0')}"
+            end.join(' ')}"
           end
 
           # Extract user_id from null-terminated string
@@ -1188,19 +1104,19 @@ module RBZK
 
       # Extract time components
       second = t % 60
-      t = t / 60
+      t /= 60
 
       minute = t % 60
-      t = t / 60
+      t /= 60
 
       hour = t % 24
-      t = t / 24
+      t /= 24
 
       day = t % 31 + 1
-      t = t / 31
+      t /= 31
 
       month = t % 12 + 1
-      t = t / 12
+      t /= 12
 
       year = t + 2000
 
@@ -1221,11 +1137,10 @@ module RBZK
 
     def encode_time(t)
       # Calculate encoded timestamp
-      d = (
+      (
         ((t.year % 100) * 12 * 31 + ((t.month - 1) * 31) + t.day - 1) *
           (24 * 60 * 60) + (t.hour * 60 + t.minute) * 60 + t.second
       )
-      d
     end
 
     def get_time
@@ -1233,11 +1148,9 @@ module RBZK
       response_size = 1032
       response = send_command(command, '', response_size)
 
-      if response && response[:status]
-        decode_time(@data[0...4])
-      else
-        raise RBZK::ZKErrorResponse, "Can't get time"
-      end
+      raise RBZK::ZKErrorResponse, "Can't get time" unless response && response[:status]
+
+      decode_time(@data[0...4])
     end
 
     def set_time(timestamp = nil)
@@ -1248,11 +1161,9 @@ module RBZK
       command_string = [ encode_time(timestamp) ].pack('L<')
       response = send_command(command, command_string)
 
-      if response && response[:status]
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't set time"
-      end
+      raise RBZK::ZKErrorResponse, "Can't set time" unless response && response[:status]
+
+      true
     end
 
     def clear_attendance_logs
@@ -1273,33 +1184,33 @@ module RBZK
 
       result = "b'"
       binary_string.each_byte do |byte|
-        case byte
-        when 0x0d # Carriage return - Python shows as \r
-          result += "\\r"
-        when 0x0a # Line feed - Python shows as \n
-          result += "\\n"
-        when 0x09 # Tab - Python shows as \t
-          result += "\\t"
-        when 0x07 # Bell - Python can show as \a or \x07
-          result += "\\x07"
-        when 0x08 # Backspace - Python shows as \b
-          result += "\\b"
-        when 0x0c # Form feed - Python shows as \f
-          result += "\\f"
-        when 0x0b # Vertical tab - Python shows as \v
-          result += "\\v"
-        when 0x5c # Backslash - Python shows as \\
-          result += "\\\\"
-        when 0x27 # Single quote - Python shows as \'
-          result += "\\'"
-        when 0x22 # Double quote - Python shows as \"
-          result += "\\\""
-        when 32..126 # Printable ASCII
-          result += byte.chr
-        else
-          # All other bytes - Python shows as \xHH
-          result += "\\x#{byte.to_s(16).rjust(2, '0')}"
-        end
+        result += case byte
+                  when 0x0d # Carriage return - Python shows as \r
+                    '\\r'
+                  when 0x0a # Line feed - Python shows as \n
+                    '\\n'
+                  when 0x09 # Tab - Python shows as \t
+                    '\\t'
+                  when 0x07 # Bell - Python can show as \a or \x07
+                    '\\x07'
+                  when 0x08 # Backspace - Python shows as \b
+                    '\\b'
+                  when 0x0c # Form feed - Python shows as \f
+                    '\\f'
+                  when 0x0b # Vertical tab - Python shows as \v
+                    '\\v'
+                  when 0x5c # Backslash - Python shows as \\
+                    '\\\\'
+                  when 0x27 # Single quote - Python shows as \'
+                    "\\'"
+                  when 0x22 # Double quote - Python shows as \"
+                    '\"'
+                  when 32..126 # Printable ASCII
+                    byte.chr
+                  else
+                    # All other bytes - Python shows as \xHH
+                    "\\x#{byte.to_s(16).rjust(2, '0')}"
+                  end
       end
       result += "'"
       result
@@ -1355,8 +1266,19 @@ module RBZK
           (0...max_len).each do |j|
             ruby_byte = j < ruby_bytes.length ? ruby_bytes[j] : nil
             python_byte = j < python_bytes.length ? python_bytes[j] : nil
-            match = ruby_byte == python_byte ? "✓" : "✗"
-            puts "  Byte #{j}: Ruby=#{ruby_byte.nil? ? 'nil' : "0x#{ruby_byte.to_s(16).rjust(2, '0')}"}, Python=#{python_byte.nil? ? 'nil' : "0x#{python_byte.to_s(16).rjust(2, '0')}"} #{match}"
+            match = ruby_byte == python_byte ? '✓' : '✗'
+            puts "  Byte #{j}: Ruby=#{if ruby_byte.nil?
+                                        'nil'
+                                      else
+                                        "0x#{ruby_byte.to_s(16).rjust(2,
+                                                                      '0')}"
+                                      end}, Python=#{if python_byte.nil?
+                                                       'nil'
+                                                     else
+                                                       "0x#{python_byte.to_s(16).rjust(
+                                                         2, '0'
+                                                       )}"
+                                                     end} #{match}"
           end
         else
           puts 'Binary data matches exactly!'
@@ -1379,60 +1301,52 @@ module RBZK
       response_size = 1024
       cmd_response = send_command(command, '', response_size)
 
-      if cmd_response && cmd_response[:status]
+      raise RBZK::ZKErrorResponse, "Can't read sizes" unless cmd_response && cmd_response[:status]
+
+      if @verbose
+        puts "Data hex: #{@data.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
+        puts "Data Python format: #{python_format(@data)}"
+      end
+
+      size = @data.size
+      puts "Data size: #{size} bytes" if @verbose
+
+      if @data.size >= 80
+        # In Python: fields = unpack('20i', self.__data[:80])
+        # In Ruby, 'l<' is a signed 32-bit integer (4 bytes) in little-endian format, which matches Python's 'i'
+        fields = @data[0...80].unpack('l<20')
+
+        puts "Unpacked fields: #{fields.inspect}" if @verbose
+
+        @users = fields[4]
+        @fingers = fields[6]
+        @records = fields[8]
+        @dummy = fields[10] # ???
+        @cards = fields[12]
+        @fingers_cap = fields[14]
+        @users_cap = fields[15]
+        @rec_cap = fields[16]
+        @fingers_av = fields[17]
+        @users_av = fields[18]
+        @rec_av = fields[19]
+        @data = @data[80..-1]
+
+        # Check for face information (added to match Python implementation)
+        if @data.size >= 12 # face info
+          # In Python: fields = unpack('3i', self.__data[:12]) #dirty hack! we need more information
+          face_fields = @data[0...12].unpack('l<3')
+          @faces = face_fields[0]
+          @faces_cap = face_fields[2]
+
+          puts "Face info: faces=#{@faces}, capacity=#{@faces_cap}" if @verbose
+        end
+
         if @verbose
-          puts "Data hex: #{@data.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-          puts "Data Python format: #{python_format(@data)}"
+          puts "Device info: users=#{@users}, fingers=#{@fingers}, records=#{@records}"
+          puts "Capacity: users=#{@users_cap}, fingers=#{@fingers_cap}, records=#{@rec_cap}"
         end
 
-        size = @data.size
-        if @verbose
-          puts "Data size: #{size} bytes"
-        end
-
-        if @data.size >= 80
-          # In Python: fields = unpack('20i', self.__data[:80])
-          # In Ruby, 'l<' is a signed 32-bit integer (4 bytes) in little-endian format, which matches Python's 'i'
-          fields = @data[0...80].unpack('l<20')
-
-          if @verbose
-            puts "Unpacked fields: #{fields.inspect}"
-          end
-
-          @users = fields[4]
-          @fingers = fields[6]
-          @records = fields[8]
-          @dummy = fields[10] # ???
-          @cards = fields[12]
-          @fingers_cap = fields[14]
-          @users_cap = fields[15]
-          @rec_cap = fields[16]
-          @fingers_av = fields[17]
-          @users_av = fields[18]
-          @rec_av = fields[19]
-          @data = @data[80..-1]
-
-          # Check for face information (added to match Python implementation)
-          if @data.size >= 12 # face info
-            # In Python: fields = unpack('3i', self.__data[:12]) #dirty hack! we need more information
-            face_fields = @data[0...12].unpack('l<3')
-            @faces = face_fields[0]
-            @faces_cap = face_fields[2]
-
-            if @verbose
-              puts "Face info: faces=#{@faces}, capacity=#{@faces_cap}"
-            end
-          end
-
-          if @verbose
-            puts "Device info: users=#{@users}, fingers=#{@fingers}, records=#{@records}"
-            puts "Capacity: users=#{@users_cap}, fingers=#{@fingers_cap}, records=#{@rec_cap}"
-          end
-
-          return true
-        end
-      else
-        raise RBZK::ZKErrorResponse, "Can't read sizes"
+        return true
       end
 
       false
@@ -1516,9 +1430,7 @@ module RBZK
           # Use connect_ex like Python (returns error code instead of raising exception)
           sockaddr = Socket.pack_sockaddr_in(@port, @ip)
           @socket.connect_nonblock(sockaddr)
-          if @verbose
-            puts "TCP socket connected successfully"
-          end
+          puts 'TCP socket connected successfully' if @verbose
         rescue IO::WaitWritable
           # Socket is in progress of connecting
           ready = IO.select(nil, [ @socket ], nil, @timeout)
@@ -1527,42 +1439,30 @@ module RBZK
               @socket.connect_nonblock(sockaddr)
             rescue Errno::EISCONN
               # Already connected, which is fine
-              if @verbose
-                puts "TCP socket connected successfully"
-              end
-            rescue => e
+              puts 'TCP socket connected successfully' if @verbose
+            rescue StandardError => e
               # Connection failed
-              if @verbose
-                puts "TCP socket connection failed: #{e.message}"
-              end
+              puts "TCP socket connection failed: #{e.message}" if @verbose
               raise e
             end
           else
             # Connection timed out
-            if @verbose
-              puts "TCP socket connection timed out"
-            end
+            puts 'TCP socket connection timed out' if @verbose
             raise Errno::ETIMEDOUT
           end
         rescue Errno::EISCONN
           # Already connected, which is fine
-          if @verbose
-            puts "TCP socket already connected"
-          end
+          puts 'TCP socket already connected' if @verbose
         end
       else
         # Create UDP socket (like Python's socket(AF_INET, SOCK_DGRAM))
         @socket = Socket.new(Socket::AF_INET, Socket::SOCK_DGRAM)
         @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [ @timeout, 0 ].pack('l_*'))
 
-        if @verbose
-          puts "UDP socket created successfully"
-        end
+        puts 'UDP socket created successfully' if @verbose
       end
-    rescue => e
-      if @verbose
-        puts "Socket creation failed: #{e.message}"
-      end
+    rescue StandardError => e
+      puts "Socket creation failed: #{e.message}" if @verbose
       raise RBZK::ZKNetworkError, "Failed to create socket: #{e.message}"
     end
 
@@ -1588,24 +1488,18 @@ module RBZK
     end
 
     def ping
-      if @verbose
-        puts "Pinging device at #{@ip}:#{@port}..."
-      end
+      puts "Pinging device at #{@ip}:#{@port}..." if @verbose
 
       # Try TCP ping first
       begin
         Timeout.timeout(5) do
           s = TCPSocket.new(@ip, @port)
           s.close
-          if @verbose
-            puts "TCP ping successful"
-          end
+          puts 'TCP ping successful' if @verbose
           return true
         end
       rescue Timeout::Error, Errno::ECONNREFUSED, Errno::EHOSTUNREACH => e
-        if @verbose
-          puts "TCP ping failed: #{e.message}"
-        end
+        puts "TCP ping failed: #{e.message}" if @verbose
       end
 
       # If TCP ping fails, try UDP ping
@@ -1616,23 +1510,17 @@ module RBZK
         ready = IO.select([ udp_socket ], nil, nil, 5)
 
         if ready
-          if @verbose
-            puts "UDP ping successful"
-          end
+          puts 'UDP ping successful' if @verbose
           udp_socket.close
-          return true
+          true
         else
-          if @verbose
-            puts "UDP ping timed out"
-          end
+          puts 'UDP ping timed out' if @verbose
           udp_socket.close
-          return false
+          false
         end
-      rescue => e
-        if @verbose
-          puts "UDP ping failed: #{e.message}"
-        end
-        return false
+      rescue StandardError => e
+        puts "UDP ping failed: #{e.message}" if @verbose
+        false
       end
     end
 
@@ -1651,24 +1539,18 @@ module RBZK
 
         # In Python: if checksum > const.USHRT_MAX: checksum -= const.USHRT_MAX
         # Handle overflow immediately after each addition
-        if checksum > USHRT_MAX
-          checksum -= USHRT_MAX
-        end
+        checksum -= USHRT_MAX if checksum > USHRT_MAX
 
         l -= 2
       end
 
       # Handle odd byte if present
       # In Python: if l: checksum = checksum + p[-1]
-      if l > 0
-        checksum += buf[i]
-      end
+      checksum += buf[i] if l.positive?
 
       # Handle overflow
       # In Python: while checksum > const.USHRT_MAX: checksum -= const.USHRT_MAX
-      while checksum > USHRT_MAX
-        checksum -= USHRT_MAX
-      end
+      checksum -= USHRT_MAX while checksum > USHRT_MAX
 
       # Bitwise complement
       # In Python: checksum = ~checksum
@@ -1676,9 +1558,7 @@ module RBZK
 
       # Handle negative values
       # In Python: while checksum < 0: checksum += const.USHRT_MAX
-      while checksum < 0
-        checksum += USHRT_MAX
-      end
+      checksum += USHRT_MAX while checksum.negative?
 
       # Return the checksum
       checksum
@@ -1687,6 +1567,7 @@ module RBZK
     # Helper method to debug binary data in both Python and Ruby formats
     def debug_binary(name, data)
       return unless @verbose
+
       puts "#{name} (hex): #{data.bytes.map { |b| "\\x#{b.to_s(16).rjust(2, '0')}" }.join('')}"
       puts "#{name} (Ruby): #{data.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
       puts "#{name} (Python): #{format_as_python_bytes(data)}"
@@ -1724,9 +1605,7 @@ module RBZK
 
       # Update reply_id
       reply_id += 1
-      if reply_id >= USHRT_MAX
-        reply_id -= USHRT_MAX
-      end
+      reply_id -= USHRT_MAX if reply_id >= USHRT_MAX
 
       # Create final header with updated values
       buf = [ command, checksum, session_id, reply_id ].pack('v4')
@@ -1800,9 +1679,7 @@ module RBZK
             debug_binary('TCP response', @tcp_data_recv)
           end
 
-          if @tcp_length == 0
-            raise RBZK::ZKNetworkError, "TCP packet invalid"
-          end
+          raise RBZK::ZKNetworkError, 'TCP packet invalid' if @tcp_length.zero?
 
           @header = @tcp_data_recv[8..15].unpack('v4')
           @data_recv = @tcp_data_recv[8..-1]
@@ -1812,10 +1689,8 @@ module RBZK
           @data_recv = @socket.recv(response_size)
           @header = @data_recv[0..7].unpack('S<4')
         end
-      rescue => e
-        if @verbose
-          puts "Connection error during send: #{e.message}"
-        end
+      rescue StandardError => e
+        puts "Connection error during send: #{e.message}" if @verbose
         raise RBZK::ZKNetworkError, e.message
       end
 
@@ -1840,9 +1715,7 @@ module RBZK
 
     def recv_reply
       begin
-        if @verbose
-          puts "Waiting for TCP reply"
-        end
+        puts 'Waiting for TCP reply' if @verbose
 
         # Set a timeout for the read operation
         Timeout.timeout(5) do
@@ -1853,15 +1726,11 @@ module RBZK
           # Parse TCP header
           tcp_format1, tcp_format2, tcp_length = tcp_header.unpack('S<S<I<')
 
-          if @verbose
-            puts "TCP header: format1=#{tcp_format1}, format2=#{tcp_format2}, length=#{tcp_length}"
-          end
+          puts "TCP header: format1=#{tcp_format1}, format2=#{tcp_format2}, length=#{tcp_length}" if @verbose
 
           # Verify TCP header format
           if tcp_format1 != MACHINE_PREPARE_DATA_1 || tcp_format2 != MACHINE_PREPARE_DATA_2
-            if @verbose
-              puts "Invalid TCP header format: #{tcp_format1}, #{tcp_format2}"
-            end
+            puts "Invalid TCP header format: #{tcp_format1}, #{tcp_format2}" if @verbose
             return nil
           end
 
@@ -1880,30 +1749,24 @@ module RBZK
           data_size = tcp_length - 8
 
           # Read data if available
-          data = ""
-          if data_size > 0
-            if @verbose
-              puts "Reading #{data_size} bytes of data"
-            end
+          data = ''
+          if data_size.positive?
+            puts "Reading #{data_size} bytes of data" if @verbose
 
             # Read data in chunks to handle large responses (like Python implementation)
             remaining = data_size
-            while remaining > 0
+            while remaining.positive?
               chunk_size = [ remaining, 4096 ].min
               chunk = @socket.read(chunk_size)
               if chunk.nil? || chunk.empty?
-                if @verbose
-                  puts "Failed to read data chunk, got #{chunk.inspect}"
-                end
+                puts "Failed to read data chunk, got #{chunk.inspect}" if @verbose
                 break
               end
 
               data += chunk
               remaining -= chunk.size
 
-              if @verbose && remaining > 0
-                puts "Read #{chunk.size} bytes, #{remaining} remaining"
-              end
+              puts "Read #{chunk.size} bytes, #{remaining} remaining" if @verbose && remaining.positive?
             end
           end
 
@@ -1914,47 +1777,33 @@ module RBZK
           @session_id = session_id
 
           # Check command type and handle accordingly (like Python implementation)
-          if command == CMD_ACK_OK
-            if @verbose
-              puts "Received ACK_OK"
-            end
+          case command
+          when CMD_ACK_OK
+            puts 'Received ACK_OK' if @verbose
             return cmd_header + data
-          elsif command == CMD_ACK_ERROR
-            if @verbose
-              puts "Received ACK_ERROR"
-            end
+          when CMD_ACK_ERROR
+            puts 'Received ACK_ERROR' if @verbose
             return nil
-          elsif command == CMD_ACK_DATA
-            if @verbose
-              puts "Received ACK_DATA"
-            end
-            if data_size > 0
-              return cmd_header + data
-            else
-              return nil
-            end
+          when CMD_ACK_DATA
+            puts 'Received ACK_DATA' if @verbose
+            return cmd_header + data if data_size.positive?
+
+            return nil
+
           else
-            if @verbose
-              puts "Received unknown command: #{command}"
-            end
+            puts "Received unknown command: #{command}" if @verbose
             return cmd_header + data
           end
         end
       rescue Timeout::Error => e
-        if @verbose
-          puts "Timeout waiting for response: #{e.message}"
-        end
-        raise RBZK::ZKErrorResponse, "Timeout waiting for response"
+        puts "Timeout waiting for response: #{e.message}" if @verbose
+        raise RBZK::ZKErrorResponse, 'Timeout waiting for response'
       rescue Errno::ECONNRESET, Errno::EPIPE => e
-        if @verbose
-          puts "Connection error during receive: #{e.message}"
-        end
+        puts "Connection error during receive: #{e.message}" if @verbose
         raise RBZK::ZKNetworkError, "Connection error: #{e.message}"
       rescue Errno::EAGAIN, Errno::EWOULDBLOCK => e
-        if @verbose
-          puts "Timeout waiting for response: #{e.message}"
-        end
-        raise RBZK::ZKErrorResponse, "Timeout waiting for response"
+        puts "Timeout waiting for response: #{e.message}" if @verbose
+        raise RBZK::ZKErrorResponse, 'Timeout waiting for response'
       end
 
       nil
@@ -1971,24 +1820,18 @@ module RBZK
     end
 
     def recv_chunk(size)
-      if @verbose
-        puts "Receiving chunk of #{size} bytes"
-      end
+      puts "Receiving chunk of #{size} bytes" if @verbose
 
       if @data_recv && @data_recv.size >= size
         data = @data_recv[0...size]
         @data_recv = @data_recv[size..-1]
 
-        if @verbose
-          puts "Received #{data.size} bytes from buffer"
-        end
+        puts "Received #{data.size} bytes from buffer" if @verbose
 
         return data
       end
 
-      if @verbose
-        puts "Warning: No data available in buffer"
-      end
+      puts 'Warning: No data available in buffer' if @verbose
 
       # Return empty string if no data is available
       ''
@@ -2005,11 +1848,11 @@ module RBZK
       k = 0
 
       32.times do |i|
-        if (key & (1 << i)) != 0
-          k = (k << 1 | 1)
-        else
-          k = k << 1
-        end
+        k = if (key & (1 << i)) != 0
+              (k << 1 | 1)
+            else
+              k << 1
+            end
       end
 
       k += session_id
@@ -2042,9 +1885,7 @@ module RBZK
       # Note: The third byte is just B, not k[2] ^ B
       result = [ k_bytes[0] ^ b, k_bytes[1] ^ b, b, k_bytes[3] ^ b ].pack('C4')
 
-      if @verbose
-        puts "Final commkey bytes: #{result.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}"
-      end
+      puts "Final commkey bytes: #{result.bytes.map { |b| "0x#{b.to_s(16).rjust(2, '0')}" }.join(' ')}" if @verbose
 
       result
     end
