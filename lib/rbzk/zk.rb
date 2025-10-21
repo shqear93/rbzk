@@ -427,21 +427,16 @@ module RBZK
     def set_user(uid: nil, name: '', privilege: 0, password: '', group_id: '', user_id: '', card: 0)
       # If uid is not provided, use next_uid
       if uid.nil?
+        ensure_user_metadata!
         uid = @next_uid
-        if user_id.empty?
-          user_id = @next_user_id
-        end
+        user_id = @next_user_id if user_id.empty? && @next_user_id
       end
 
-      # If user_id is not provided, use uid as string
-      if user_id.empty?
-        user_id = uid.to_s # ZK6 needs uid2 == uid
-      end
+      # If uid is not provided, use next_uid
+      user_id = uid.to_s if user_id.nil? || user_id.empty? # ZK6 needs uid2 == uid
 
       # Validate privilege
-      if privilege != USER_DEFAULT && privilege != USER_ADMIN
-        privilege = USER_DEFAULT
-      end
+      privilege = USER_DEFAULT if privilege != USER_DEFAULT && privilege != USER_ADMIN
       privilege = privilege.to_i
 
       # Create command string based on user_packet_size
@@ -449,27 +444,24 @@ module RBZK
         group_id = 0 if group_id.empty?
 
         begin
-          command_string = [uid, privilege].pack('S<C') +
-                          password.encode(@encoding, invalid: :replace, undef: :replace).ljust(5, "\x00")[0...5] +
-                          name.encode(@encoding, invalid: :replace, undef: :replace).ljust(8, "\x00")[0...8] +
-                          [card.to_i, 0, group_id.to_i, 0, user_id.to_i].pack('L<CS<S<L<')
-        rescue => e
-          if @verbose
-            puts "Error packing user: #{e.message}"
-          end
+          command_string = [ uid, privilege ].pack('S<C') +
+                           password.encode(@encoding, invalid: :replace, undef: :replace).ljust(5, "\x00")[0...5] +
+                           name.encode(@encoding, invalid: :replace, undef: :replace).ljust(8, "\x00")[0...8] +
+                           [ card.to_i, 0, group_id.to_i, 0, user_id.to_i ].pack('L<CS<S<L<')
+        rescue StandardError => e
+          puts "Error packing user: #{e.message}" if @verbose
           raise RBZK::ZKErrorResponse, "Can't pack user"
         end
       else
         # For other firmware versions
         name_pad = name.encode(@encoding, invalid: :replace, undef: :replace).ljust(24, "\x00")[0...24]
-        card_str = [card.to_i].pack('L<')[0...4]
-        command_string = [uid, privilege].pack('S<C') +
-                        password.encode(@encoding, invalid: :replace, undef: :replace).ljust(8, "\x00")[0...8] +
-                        name_pad +
-                        card_str + "\x00" +
-                        group_id.encode(@encoding, invalid: :replace, undef: :replace).ljust(7, "\x00")[0...7] +
-                        "\x00" +
-                        user_id.encode(@encoding, invalid: :replace, undef: :replace).ljust(24, "\x00")[0...24]
+        card_str = [ card.to_i ].pack('L<')[0...4]
+        command_string = "#{[ uid,
+                              privilege ].pack('S<C')}#{password.encode(@encoding, invalid: :replace, undef: :replace).ljust(8,
+                                                                                                                             "\x00")[0...8]}#{name_pad}#{card_str}\u0000#{group_id.encode(@encoding, invalid: :replace, undef: :replace).ljust(7,
+                                                                                                                                                                                                                                               "\x00")[0...7]}\u0000#{user_id.encode(@encoding, invalid: :replace, undef: :replace).ljust(
+                                                                                                                                                                                                                                                 24, "\x00"
+                                                                                                                                                                                                                                               )[0...24]}"
       end
 
       # Send command
@@ -477,18 +469,32 @@ module RBZK
 
       if response && response[:status]
         # Update next_uid and next_user_id if necessary
-        self.refresh_data
-        if @next_uid == uid
-          @next_uid += 1
-        end
-        if @next_user_id == user_id
-          @next_user_id = @next_uid.to_s
-        end
+        refresh_data
+        @next_uid += 1 if @next_uid == uid
+        @next_user_id = @next_uid.to_s if @next_user_id == user_id
         true
       else
-        raise RBZK::ZKErrorResponse, "Can't set user"
+        code = response[:code] if response
+        data_msg = @data && !@data.empty? ? " Data: #{format_as_python_bytes(@data)}" : ''
+        raise RBZK::ZKErrorResponse, "Can't set user (device response: #{code || 'NO_CODE'})#{data_msg}"
       end
     end
+
+    def ensure_user_metadata!
+      @next_uid ||= 1
+      @next_user_id ||= '1'
+      @user_packet_size ||= 28
+
+      return unless @next_uid <= 1 || @next_user_id.nil? || @user_packet_size.nil?
+
+      get_users
+    rescue StandardError => e
+      puts "Warning: unable to refresh user metadata before creating user: #{e.message}" if @verbose
+      @next_uid ||= 1
+      @next_user_id ||= '1'
+      @user_packet_size ||= 28
+    end
+    private :ensure_user_metadata!
 
     # Delete user by uid
     # @param uid [Integer] user ID that are generated from device
@@ -498,16 +504,14 @@ module RBZK
       command_string = [ uid ].pack('S<')
       response = send_command(CMD_DELETE_USER, command_string)
 
-      if response && response[:status]
-        self.refresh_data
-        # Update next_uid if necessary
-        if uid == (@next_uid - 1)
-          @next_uid = uid
-        end
-        true
-      else
-        raise RBZK::ZKErrorResponse, "Can't delete user"
+      unless response && response[:status]
+        raise RBZK::ZKErrorResponse, "Can't delete user. User not found or other error."
       end
+
+      refresh_data
+      # Update next_uid if necessary
+      @next_uid = uid if uid == (@next_uid - 1)
+      true
     end
 
     # Helper method to read data with buffer (ZK6: 1503)
