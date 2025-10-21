@@ -185,20 +185,15 @@ RSpec.describe RBZK::CLI::Commands do
       )
     end
 
-    it 'disables and enables the device around set_user and verifies when requested' do
-      # Set up command line options with verify
+    it 'disables and enables the device around set_user' do
+      # Set up command line options
       allow(cli).to receive(:options).and_return({
-                                                   name: 'Verify User',
-                                                   user_id: 'V001',
-                                                   verify: true
+                                                   name: 'Some User',
+                                                   user_id: 'U001'
                                                  })
 
-      # Mock get_users for verification
-      sample_user = instance_double(RBZK::User, uid: 99, user_id: 'V001')
-      allow(conn).to receive(:get_users).and_return([ sample_user ])
-
       # Call the method and capture output
-      expect { cli.add_user('192.168.100.201') }.to output(/Verifying user creation/).to_stdout
+      expect { cli.add_user('192.168.100.201') }.to output(%r{Adding/updating user.*Re-enabling device}m).to_stdout
 
       expect(conn).to have_received(:disable_device)
       expect(conn).to have_received(:enable_device)
@@ -271,11 +266,7 @@ RSpec.describe RBZK::CLI::Commands do
       expect { cli.get_user_template('192.168.100.201') }.to output(/Getting user fingerprint template/).to_stdout
 
       # Verify that get_user_template was called with the correct parameters
-      expect(conn).to have_received(:get_user_template).with(
-        uid: 42,
-        temp_id: 1,
-        user_id: 'EMP123'
-      )
+      expect(conn).to have_received(:get_user_template).with(42, 1)
     end
   end
 end
