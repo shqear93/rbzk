@@ -217,7 +217,7 @@ RSpec.describe RBZK::CLI::Commands do
 
       # Mock the get_users method to return a user with the given user_id
       user = instance_double(RBZK::User, uid: 42, user_id: 'EMP123')
-      allow(conn).to receive(:get_users).and_return([user])
+      allow(conn).to receive(:get_users).and_return([ user ])
 
       # Call the method
       expect { cli.delete_user('192.168.100.201') }.to output(/Deleting user/).to_stdout

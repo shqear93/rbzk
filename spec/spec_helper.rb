@@ -1,4 +1,5 @@
 require 'bundler/setup'
+require 'rspec'
 require 'rbzk'
 require 'rbzk/cli/config'
 require 'rbzk/cli/commands'

@@ -9,3 +9,5 @@ gemspec
 gem 'bytes'
 
 gem 'rubocop'
+
+gem 'rspec'
