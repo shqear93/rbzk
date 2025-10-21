@@ -63,7 +63,7 @@ module RBZK
             table = ::Terminal::Table.new do |t|
               t.title = 'Device Information'
               device_info.each do |key, value|
-                t << [key, value]
+                t << [ key, value ]
               end
             end
 
@@ -108,28 +108,28 @@ module RBZK
       map 'logs-today' => 'logs'
 
       def logs_today(ip = nil)
-        invoke :logs, [ip], { today: true }.merge(options)
+        invoke :logs, [ ip ], { today: true }.merge(options)
       end
 
       desc 'logs-yesterday [IP]', "Get yesterday's attendance logs"
       map 'logs-yesterday' => 'logs'
 
       def logs_yesterday(ip = nil)
-        invoke :logs, [ip], { yesterday: true }.merge(options)
+        invoke :logs, [ ip ], { yesterday: true }.merge(options)
       end
 
       desc 'logs-week [IP]', "Get this week's attendance logs"
       map 'logs-week' => 'logs'
 
       def logs_week(ip = nil)
-        invoke :logs, [ip], { week: true }.merge(options)
+        invoke :logs, [ ip ], { week: true }.merge(options)
       end
 
       desc 'logs-month [IP]', "Get this month's attendance logs"
       map 'logs-month' => 'logs'
 
       def logs_month(ip = nil)
-        invoke :logs, [ip], { month: true }.merge(options)
+        invoke :logs, [ ip ], { month: true }.merge(options)
       end
 
       desc 'logs-all [IP]', 'Get all attendance logs without limit'
@@ -153,7 +153,7 @@ module RBZK
               # Pretty table output
               table = ::Terminal::Table.new do |t|
                 t.title = 'All Attendance Logs (Showing All Records)'
-                t.headings = ['UID', 'User ID', 'Time', 'Status', 'Punch Type']
+                t.headings = [ 'UID', 'User ID', 'Time', 'Status', 'Punch Type' ]
 
                 # Show all logs in the table
                 logs.each do |log|
@@ -185,7 +185,7 @@ module RBZK
       def logs_custom(start_date, end_date, ip = nil)
         # Use IP from options if not provided as argument
         ip ||= options[:ip] || @config['ip']
-        invoke :logs, [ip], { start_date: start_date, end_date: end_date }.merge(options)
+        invoke :logs, [ ip ], { start_date: start_date, end_date: end_date }.merge(options)
       end
 
       desc 'logs [IP]', 'Get attendance logs'
@@ -298,7 +298,7 @@ module RBZK
               # Pretty table output
               table = ::Terminal::Table.new do |t|
                 t.title = title || 'Attendance Logs'
-                t.headings = ['UID', 'User ID', 'Time', 'Status', 'Punch Type']
+                t.headings = [ 'UID', 'User ID', 'Time', 'Status', 'Punch Type' ]
 
                 # Show logs in the table based on limit
                 display_logs.each do |log|
@@ -505,7 +505,7 @@ module RBZK
             # Use Terminal::Table for pretty output
             table = ::Terminal::Table.new do |t|
               t.title = 'Fingerprint Templates'
-              t.headings = ['UID', 'Finger ID', 'Valid', 'Size']
+              t.headings = [ 'UID', 'Finger ID', 'Valid', 'Size' ]
 
               templates.each do |template|
                 t << [
@@ -663,6 +663,34 @@ module RBZK
         end
       end
 
+      desc 'enable-device [IP]', 'Enable the device'
+      map 'enable-device' => :enable_device
+
+      def enable_device(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
+
+        with_connection(ip, options) do |conn|
+          puts 'Enabling device...'
+          result = conn.enable_device
+          puts '✓ Device enabled successfully!' if result
+        end
+      end
+
+      desc 'disable-device [IP]', 'Disable the device'
+      map 'disable-device' => :disable_device
+
+      def disable_device(ip = nil)
+        # Use IP from options if not provided as argument
+        ip ||= options[:ip] || @config['ip']
+
+        with_connection(ip, options) do |conn|
+          puts 'Disabling device...'
+          result = conn.disable_device
+          puts '✓ Device disabled successfully!' if result
+        end
+      end
+
       desc 'poweroff [IP]', 'Power off the device'
 
       def poweroff(ip = nil)
@@ -791,7 +819,7 @@ module RBZK
           # Use Terminal::Table for pretty output
           table = ::Terminal::Table.new do |t|
             t.title = 'Users'
-            t.headings = ['UID', 'User ID', 'Name', 'Privilege', 'Password', 'Group ID', 'Card']
+            t.headings = [ 'UID', 'User ID', 'Name', 'Privilege', 'Password', 'Group ID', 'Card' ]
 
             users.each do |user|
               t << [

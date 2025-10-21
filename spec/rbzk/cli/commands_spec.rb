@@ -195,13 +195,33 @@ RSpec.describe RBZK::CLI::Commands do
 
       # Mock get_users for verification
       sample_user = instance_double(RBZK::User, uid: 99, user_id: 'V001')
-      allow(conn).to receive(:get_users).and_return([sample_user])
+      allow(conn).to receive(:get_users).and_return([ sample_user ])
 
       # Call the method and capture output
       expect { cli.add_user('192.168.100.201') }.to output(/Verifying user creation/).to_stdout
 
       expect(conn).to have_received(:disable_device)
       expect(conn).to have_received(:enable_device)
+    end
+  end
+
+  describe '#enable_device and #disable_device' do
+    let(:conn) { instance_double(RBZK::ZK) }
+
+    before do
+      allow(cli).to receive(:with_connection).and_yield(conn)
+      allow(conn).to receive(:enable_device)
+      allow(conn).to receive(:disable_device)
+    end
+
+    it 'calls enable_device' do
+      expect { cli.enable_device('192.168.100.201') }.to output(/Enabling device/).to_stdout
+      expect(conn).to have_received(:enable_device)
+    end
+
+    it 'calls disable_device' do
+      expect { cli.disable_device('192.168.100.201') }.to output(/Disabling device/).to_stdout
+      expect(conn).to have_received(:disable_device)
     end
   end
 
