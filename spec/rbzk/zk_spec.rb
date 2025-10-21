@@ -1,41 +1,33 @@
-RSpec.describe RBZK::ZK do
-  let(:ip) { '192.168.1.201' }
-  let(:port) { 4370 }
-  let(:zk) { RBZK::ZK.new(ip, port: port) }
+# frozen_string_literal: true
 
-  describe '#initialize' do
-    it 'creates a new ZK instance with default values' do
-      expect(zk).to be_a(RBZK::ZK)
+require 'spec_helper'
+
+RSpec.describe RBZK::ZK do
+  describe '#set_user' do
+    let(:zk) { described_class.new('127.0.0.1', force_udp: true, omit_ping: true) }
+
+    before do
+      zk.instance_variable_set(:@connected, true)
     end
 
-    it 'accepts custom parameters' do
-      custom_zk = RBZK::ZK.new(ip, port: 4371, timeout: 30, password: 123_456, force_udp: true, verbose: true)
-      expect(custom_zk).to be_a(RBZK::ZK)
+    it 'refreshes metadata before assigning a new uid when none is provided' do
+      calls = []
+      allow(zk).to receive(:send_command) do |command, command_string = ''.b, response_size = 8|
+        calls << [command, command_string, response_size]
+        { status: true, code: RBZK::Constants::CMD_ACK_OK }
+      end
+
+      expect(zk).to receive(:get_users) do
+        zk.instance_variable_set(:@next_uid, 20)
+        zk.instance_variable_set(:@next_user_id, '20')
+        []
+      end
+
+      expect(zk.set_user(name: 'Test User', user_id: '900')).to be true
+
+      first_call = calls.first
+      expect(first_call[0]).to eq(RBZK::Constants::CMD_USER_WRQ)
+      expect(first_call[1].bytes.first).to eq(20)
     end
   end
-
-  # NOTE: The following tests would require a real ZK device or a mock
-  # They are commented out as they would fail without proper setup
-
-  # describe '#connect' do
-  #   it 'connects to the device' do
-  #     allow(zk).to receive(:ping).and_return(true)
-  #     allow(zk).to receive(:send_command)
-  #     allow(zk).to receive(:recv_reply).and_return("OK")
-  #
-  #     expect(zk.connect).to eq(zk)
-  #     expect(zk.instance_variable_get(:@connected)).to be true
-  #   end
-  # end
-
-  # describe '#disconnect' do
-  #   it 'disconnects from the device' do
-  #     zk.instance_variable_set(:@connected, true)
-  #     allow(zk).to receive(:send_command)
-  #     allow(zk).to receive(:recv_reply).and_return("OK")
-  #
-  #     expect(zk.disconnect).to be true
-  #     expect(zk.instance_variable_get(:@connected)).to be false
-  #   end
-  # end
 end

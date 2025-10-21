@@ -427,17 +427,35 @@ module RBZK
         with_connection(ip, options) do |conn|
           puts 'Adding/updating user...'
 
-          result = conn.set_user(
-            uid: options[:uid],
-            name: options[:name] || '',
-            privilege: options[:privilege] || 0,
-            password: options[:password] || '',
-            group_id: options[:group_id] || '',
-            user_id: options[:user_id] || '',
-            card: options[:card] || 0
-          )
+          # Disable device for exclusive access during modification
+          begin
+            conn.disable_device
+          rescue StandardError
+            nil
+          end
 
-          puts '✓ User added/updated successfully!' if result
+          begin
+            result = conn.set_user(
+              uid: options[:uid],
+              name: options[:name] || '',
+              privilege: options[:privilege] || 0,
+              password: options[:password] || '',
+              group_id: options[:group_id] || '',
+              user_id: options[:user_id] || '',
+              card: options[:card] || 0
+            )
+            puts '✓ User added/updated successfully!' if result
+          rescue RBZK::ZKError => e
+            # Reraise to let the with_connection handler print device messages
+            raise e
+          ensure
+            # Re-enable device after modification (always)
+            begin
+              conn.enable_device
+            rescue StandardError
+              nil
+            end
+          end
         end
       end
 
@@ -743,6 +761,8 @@ module RBZK
         rescue RBZK::ZKNetworkError => e
           puts "✗ Network Error: #{e.message}"
           puts 'Please check the IP address and ensure the device is reachable.'
+        rescue RBZK::ZKErrorExists => e
+          puts "✗ Device Error: #{e.message}"
         rescue RBZK::ZKErrorResponse => e
           puts "✗ Device Error: #{e.message}"
           puts 'The device returned an error response.'
@@ -815,11 +835,10 @@ module RBZK
 
       def format_privilege(privilege)
         case privilege
-        when 0 then 'User'
-        when 1 then 'Enroller'
-        when 2 then 'Manager'
-        when 3 then 'Administrator'
-        when 14 then 'Super Admin'
+        when RBZK::Constants::USER_DEFAULT then 'User'
+        when RBZK::Constants::USER_ENROLLER then 'Enroller'
+        when RBZK::Constants::USER_MANAGER then 'Manager'
+        when RBZK::Constants::USER_ADMIN then 'Admin'
         else "Unknown (#{privilege})"
         end
       end

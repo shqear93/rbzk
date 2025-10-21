@@ -20,4 +20,10 @@ module RBZK
       super
     end
   end
+
+  class ZKErrorExists < ZKError
+    def initialize(msg = 'Data already exists')
+      super
+    end
+  end
 end

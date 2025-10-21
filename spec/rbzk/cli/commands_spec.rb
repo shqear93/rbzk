@@ -133,6 +133,8 @@ RSpec.describe RBZK::CLI::Commands do
     before do
       allow(cli).to receive(:with_connection).and_yield(conn)
       allow(conn).to receive(:set_user).and_return(true)
+      allow(conn).to receive(:disable_device)
+      allow(conn).to receive(:enable_device)
     end
 
     it 'creates a User object and calls set_user with its attributes' do
@@ -181,6 +183,25 @@ RSpec.describe RBZK::CLI::Commands do
         user_id: '',
         card: 0
       )
+    end
+
+    it 'disables and enables the device around set_user and verifies when requested' do
+      # Set up command line options with verify
+      allow(cli).to receive(:options).and_return({
+                                                   name: 'Verify User',
+                                                   user_id: 'V001',
+                                                   verify: true
+                                                 })
+
+      # Mock get_users for verification
+      sample_user = instance_double(RBZK::User, uid: 99, user_id: 'V001')
+      allow(conn).to receive(:get_users).and_return([sample_user])
+
+      # Call the method and capture output
+      expect { cli.add_user('192.168.100.201') }.to output(/Verifying user creation/).to_stdout
+
+      expect(conn).to have_received(:disable_device)
+      expect(conn).to have_received(:enable_device)
     end
   end
 
