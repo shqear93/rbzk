@@ -178,8 +178,8 @@ module RBZK
     def disconnect
       return unless @connected
 
-      self.send_command(CMD_EXIT)
-      self.recv_reply
+      send_command(CMD_EXIT)
+      recv_reply
 
       @connected = false
       @socket.close if @socket
@@ -191,8 +191,8 @@ module RBZK
     end
 
     def enable_device
-      self.send_command(CMD_ENABLEDEVICE)
-      self.recv_reply
+      send_command(CMD_ENABLEDEVICE)
+      recv_reply
       true
     end
 
@@ -209,7 +209,7 @@ module RBZK
     def get_firmware_version
       command = CMD_GET_VERSION
       response_size = 1024
-      response = self.send_command(command, "", response_size)
+      response = send_command(command, '', response_size)
 
       if response && response[:status]
         firmware_version = @data.split("\x00")[0]
@@ -224,7 +224,7 @@ module RBZK
       command_string = "~SerialNumber\x00".b
       response_size = 1024
 
-      response = self.send_command(command, command_string, response_size)
+      response = send_command(command, command_string, response_size)
 
       if response && response[:status]
         serialnumber = @data.split("=", 2)[1]&.split("\x00")[0] || ""
@@ -240,7 +240,7 @@ module RBZK
       command_string = "MAC\x00".b
       response_size = 1024
 
-      response = self.send_command(command, command_string, response_size)
+      response = send_command(command, command_string, response_size)
 
       if response && response[:status]
         mac = @data.split("=", 2)[1]&.split("\x00")[0] || ""
@@ -255,13 +255,13 @@ module RBZK
       command_string = "~DeviceName\x00".b
       response_size = 1024
 
-      response = self.send_command(command, command_string, response_size)
+      response = send_command(command, command_string, response_size)
 
       if response && response[:status]
         device = @data.split("=", 2)[1]&.split("\x00")[0] || ""
         device.to_s
       else
-        ""
+        ''
       end
     end
 
@@ -270,7 +270,7 @@ module RBZK
       command_string = "ZKFaceVersion\x00".b
       response_size = 1024
 
-      response = self.send_command(command, command_string, response_size)
+      response = send_command(command, command_string, response_size)
 
       if response && response[:status]
         version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
@@ -285,7 +285,7 @@ module RBZK
       command_string = "~ExtendFmt\x00".b
       response_size = 1024
 
-      response = self.send_command(command, command_string, response_size)
+      response = send_command(command, command_string, response_size)
 
       if response && response[:status]
         fmt = @data.split("=", 2)[1]&.split("\x00")[0] || ""
@@ -300,7 +300,7 @@ module RBZK
       command_string = "~Platform\x00".b
       response_size = 1024
 
-      response = self.send_command(command, command_string, response_size)
+      response = send_command(command, command_string, response_size)
 
       if response && response[:status]
         platform = @data.split("=", 2)[1]&.split("\x00")[0] || ""
@@ -316,7 +316,7 @@ module RBZK
       command_string = "~ZKFPVersion\x00".b
       response_size = 1024
 
-      response = self.send_command(command, command_string, response_size)
+      response = send_command(command, command_string, response_size)
 
       if response && response[:status]
         version = @data.split("=", 2)[1]&.split("\x00")[0] || ""
@@ -328,20 +328,20 @@ module RBZK
     end
 
     def restart
-      self.send_command(CMD_RESTART)
-      self.recv_reply
+      send_command(CMD_RESTART)
+      recv_reply
       true
     end
 
     def poweroff
-      self.send_command(CMD_POWEROFF)
-      self.recv_reply
+      send_command(CMD_POWEROFF)
+      recv_reply
       true
     end
 
     def test_voice(index = 0)
       command_string = [ index ].pack('L<')
-      response = self.send_command(CMD_TESTVOICE, command_string)
+      response = send_command(CMD_TESTVOICE, command_string)
 
       if response && response[:status]
         true
@@ -354,8 +354,8 @@ module RBZK
     # @param time [Integer] define delay in seconds
     # @return [Boolean] true if successful, raises exception otherwise
     def unlock(time = 3)
-      command_string = [time * 10].pack('L<')
-      response = self.send_command(CMD_UNLOCK, command_string)
+      command_string = [ time * 10 ].pack('L<')
+      response = send_command(CMD_UNLOCK, command_string)
 
       if response && response[:status]
         true
@@ -367,7 +367,7 @@ module RBZK
     # Get the lock state
     # @return [Boolean] true if door is open, false otherwise
     def get_lock_state
-      response = self.send_command(CMD_DOORSTATE_RRQ)
+      response = send_command(CMD_DOORSTATE_RRQ)
 
       if response && response[:status]
         true
@@ -394,7 +394,7 @@ module RBZK
     # Clear LCD
     # @return [Boolean] true if successful, raises exception otherwise
     def clear_lcd
-      response = self.send_command(CMD_CLEAR_LCD)
+      response = send_command(CMD_CLEAR_LCD)
 
       if response && response[:status]
         true
@@ -406,7 +406,7 @@ module RBZK
     # Refresh the device data
     # @return [Boolean] true if successful, raises exception otherwise
     def refresh_data
-      response = self.send_command(CMD_REFRESHDATA)
+      response = send_command(CMD_REFRESHDATA)
 
       if response && response[:status]
         true
@@ -473,7 +473,7 @@ module RBZK
       end
 
       # Send command
-      response = self.send_command(CMD_USER_WRQ, command_string, 1024)
+      response = send_command(CMD_USER_WRQ, command_string, 1024)
 
       if response && response[:status]
         # Update next_uid and next_user_id if necessary
@@ -495,8 +495,8 @@ module RBZK
     # @return [Boolean] true if successful, raises exception otherwise
     def delete_user(uid: 0)
       # Send command
-      command_string = [uid].pack('S<')
-      response = self.send_command(CMD_DELETE_USER, command_string)
+      command_string = [ uid ].pack('S<')
+      response = send_command(CMD_DELETE_USER, command_string)
 
       if response && response[:status]
         self.refresh_data
@@ -583,7 +583,7 @@ module RBZK
       end
 
       # Get the size from the first 4 bytes (unsigned long, little-endian)
-      size = data[1..4].unpack('L<')[0]
+      size = data[1..4].unpack1('L<')
 
       if @verbose
         puts "size fill be #{size}"
@@ -650,12 +650,12 @@ module RBZK
       puts "tcp_length #{tcp_length}, size #{size}" if @verbose
 
       if tcp_length <= 0
-        puts "Incorrect tcp packet" if @verbose
-        return nil, "".b
+        puts 'Incorrect tcp packet' if @verbose
+        return nil, ''.b
       end
 
       if (tcp_length - 8) < size
-        puts "tcp length too small... retrying" if @verbose
+        puts 'tcp length too small... retrying' if @verbose
 
         # Recursive call to handle smaller packet
         resp, bh = receive_tcp_data(data_recv, tcp_length - 8)
@@ -684,7 +684,7 @@ module RBZK
 
       # In Python: response = unpack('HHHH', data_recv[8:16])[0]
       # This unpacks 4 shorts (8 bytes) but only uses the first one
-      response = data_recv[8...16].unpack('S<S<S<S<')[0]
+      response = data_recv[8...16].unpack1('S<S<S<S<')
 
       if received >= (size + 32)
         if response == CMD_DATA
@@ -703,7 +703,7 @@ module RBZK
 
         data << data_recv[16...(size + 16)]
         size -= received - 16
-        broken_header = "".b
+        broken_header = ''.b
 
         if size < 0
           broken_header = data_recv[size..]
@@ -786,7 +786,7 @@ module RBZK
           # In Python: response = unpack('HHHH', data_recv[8:16])[0]
           # This unpacks 4 shorts (8 bytes) but only uses the first one
           # In Ruby, we need to use 'S<4' to unpack 4 shorts in little-endian format
-          response = data_recv[8...16].unpack('S<4')[0]
+          response = data_recv[8...16].unpack1('S<4')
 
           if response == CMD_ACK_OK
             if @verbose
@@ -805,7 +805,7 @@ module RBZK
           # Non-TCP implementation
           loop do
             data_recv = @socket.recv(1024 + 8)
-            response = data_recv[0...8].unpack('S<S<S<S<')[0]
+            response = data_recv[0...8].unpack1('S<S<S<S<')
 
             if @verbose
               puts "# packet response is: #{response}"
@@ -870,7 +870,7 @@ module RBZK
     # Helper method to clear buffer (like Python's free_data)
     def free_data
       command = CMD_FREE_DATA
-      response = self.send_command(command)
+      response = send_command(command)
 
       if response && response[:status]
         true
@@ -885,11 +885,11 @@ module RBZK
     def send_with_buffer(buffer)
       max_chunk = 1024
       size = buffer.size
-      self.free_data
+      free_data
 
       command = CMD_PREPARE_DATA
-      command_string = [size].pack('L<')
-      response = self.send_command(command, command_string)
+      command_string = [ size ].pack('L<')
+      response = send_command(command, command_string)
 
       if !response || !response[:status]
         raise RBZK::ZKErrorResponse, "Can't prepare data"
@@ -914,7 +914,7 @@ module RBZK
     # @return [Boolean] true if successful, raises exception otherwise
     def send_chunk(command_string)
       command = CMD_DATA
-      response = self.send_command(command, command_string)
+      response = send_command(command, command_string)
 
       if response && response[:status]
         true
@@ -941,7 +941,7 @@ module RBZK
         response_size = @tcp ? size + 32 : 1024 + 8
 
         # In Python: cmd_response = self.__send_command(command, command_string, response_size)
-        response = self.send_command(command, command_string, response_size)
+        response = send_command(command, command_string, response_size)
 
         if !response || !response[:status]
           if @verbose
@@ -968,7 +968,7 @@ module RBZK
 
     def get_users
       # Read sizes
-      self.read_sizes
+      read_sizes
 
       puts "Device has #{@users} users" if @verbose
 
@@ -981,11 +981,11 @@ module RBZK
 
       users = []
       max_uid = 0
-      userdata, size = self.read_with_buffer(CMD_USERTEMP_RRQ, FCT_USER)
+      userdata, size = read_with_buffer(CMD_USERTEMP_RRQ, FCT_USER)
       puts "user size #{size} (= #{userdata.length})" if @verbose
 
       if size <= 4
-        puts "WRN: missing user data"
+        puts 'WRN: missing user data'
         return []
       end
 
@@ -1045,7 +1045,7 @@ module RBZK
 
     def get_attendance_logs
       # First, read device sizes to get record count
-      self.read_sizes
+      read_sizes
 
       # If no records, return empty array
       if @records == 0
@@ -1053,7 +1053,7 @@ module RBZK
       end
 
       # Get users for lookup
-      users = self.get_users
+      users = get_users
 
       if @verbose
         puts "Found #{users.size} users"
@@ -1062,7 +1062,7 @@ module RBZK
       logs = []
 
       # Read attendance data with buffer
-      attendance_data, size = self.read_with_buffer(CMD_ATTLOG_RRQ)
+      attendance_data, size = read_with_buffer(CMD_ATTLOG_RRQ)
 
       if size < 4
         if @verbose
@@ -1072,7 +1072,7 @@ module RBZK
       end
 
       # Get total size from first 4 bytes
-      total_size = attendance_data[0...4].unpack('I')[0]
+      total_size = attendance_data[0...4].unpack1('I')
 
       # Calculate record size
       record_size = @records > 0 ? total_size / @records : 0
@@ -1180,7 +1180,7 @@ module RBZK
 
     def decode_time(t)
       # Convert binary timestamp to integer
-      t = t.unpack("L<")[0]
+      t = t.unpack1('L<')
 
       # Extract time components
       second = t % 60
@@ -1208,7 +1208,7 @@ module RBZK
     # Match Python's __decode_timehex method
     def decode_timehex(timehex)
       # Extract time components
-      year, month, day, hour, minute, second = timehex.unpack("C6")
+      year, month, day, hour, minute, second = timehex.unpack('C6')
       year += 2000
 
       # Create Time object
@@ -1227,7 +1227,7 @@ module RBZK
     def get_time
       command = CMD_GET_TIME
       response_size = 1032
-      response = self.send_command(command, "", response_size)
+      response = send_command(command, '', response_size)
 
       if response && response[:status]
         decode_time(@data[0...4])
@@ -1242,7 +1242,7 @@ module RBZK
 
       command = CMD_SET_TIME
       command_string = [ encode_time(timestamp) ].pack('L<')
-      response = self.send_command(command, command_string)
+      response = send_command(command, command_string)
 
       if response && response[:status]
         true
@@ -1252,14 +1252,14 @@ module RBZK
     end
 
     def clear_attendance_logs
-      self.send_command(CMD_CLEAR_ATTLOG)
-      self.recv_reply
+      send_command(CMD_CLEAR_ATTLOG)
+      recv_reply
       true
     end
 
     def clear_data
-      self.send_command(CMD_CLEAR_DATA)
-      self.recv_reply
+      send_command(CMD_CLEAR_DATA)
+      recv_reply
       true
     end
 
@@ -1310,7 +1310,7 @@ module RBZK
         puts "Python expected: #{python_expected}"
 
         if ruby_formatted != python_expected
-          puts "DIFFERENCE DETECTED!"
+          puts 'DIFFERENCE DETECTED!'
           # Show byte-by-byte comparison
           ruby_bytes = binary_string.bytes
           # Parse Python bytes string (format: b'\x01\x02')
@@ -1346,7 +1346,7 @@ module RBZK
           end
 
           # Show differences
-          puts "Byte-by-byte comparison:"
+          puts 'Byte-by-byte comparison:'
           max_len = [ ruby_bytes.length, python_bytes.length ].max
           (0...max_len).each do |j|
             ruby_byte = j < ruby_bytes.length ? ruby_bytes[j] : nil
@@ -1355,7 +1355,7 @@ module RBZK
             puts "  Byte #{j}: Ruby=#{ruby_byte.nil? ? 'nil' : "0x#{ruby_byte.to_s(16).rjust(2, '0')}"}, Python=#{python_byte.nil? ? 'nil' : "0x#{python_byte.to_s(16).rjust(2, '0')}"} #{match}"
           end
         else
-          puts "Binary data matches exactly!"
+          puts 'Binary data matches exactly!'
         end
       end
 
@@ -1373,7 +1373,7 @@ module RBZK
     def read_sizes
       command = CMD_GET_FREE_SIZES
       response_size = 1024
-      cmd_response = self.send_command(command, "", response_size)
+      cmd_response = send_command(command, '', response_size)
 
       if cmd_response && cmd_response[:status]
         if @verbose
@@ -1435,8 +1435,8 @@ module RBZK
     end
 
     def get_free_sizes
-      self.send_command(CMD_GET_FREE_SIZES)
-      reply = self.recv_reply
+      send_command(CMD_GET_FREE_SIZES)
+      reply = recv_reply
 
       if reply && reply.size >= 8
         sizes_data = reply[8..-1].unpack('S<*')
@@ -1456,11 +1456,11 @@ module RBZK
     def get_templates
       fingers = []
 
-      self.send_command(CMD_PREPARE_DATA, [ FCT_FINGERTMP ].pack('C'))
-      self.recv_reply
+      send_command(CMD_PREPARE_DATA, [ FCT_FINGERTMP ].pack('C'))
+      recv_reply
 
-      data_size = self.recv_long
-      templates_data = self.recv_chunk(data_size)
+      data_size = recv_long
+      templates_data = recv_chunk(data_size)
 
       if templates_data && !templates_data.empty?
         offset = 0
@@ -1480,8 +1480,8 @@ module RBZK
     end
 
     def get_user_template(uid, finger_id)
-      self.send_command(CMD_GET_USERTEMP, [ uid, finger_id ].pack('S<S<'))
-      reply = self.recv_reply
+      send_command(CMD_GET_USERTEMP, [ uid, finger_id ].pack('S<S<'))
+      reply = recv_reply
 
       if reply && reply.size >= 8
         template_data = reply[8..-1]
@@ -1694,18 +1694,18 @@ module RBZK
       top = [ MACHINE_PREPARE_DATA_1, MACHINE_PREPARE_DATA_2, length ].pack('S<S<I<')
 
       if @verbose
-        puts "TCP header components:"
+        puts 'TCP header components:'
         puts "  MACHINE_PREPARE_DATA_1: 0x#{MACHINE_PREPARE_DATA_1.to_s(16)}"
         puts "  MACHINE_PREPARE_DATA_2: 0x#{MACHINE_PREPARE_DATA_2.to_s(16)}"
         puts "  packet length: #{length}"
-        debug_binary("TCP header", top)
-        debug_binary("Full TCP packet", top + packet)
+        debug_binary('TCP header', top)
+        debug_binary('Full TCP packet', top + packet)
       end
 
       top + packet
     end
 
-    def create_header(command, command_string = "".b, session_id = 0, reply_id = 0)
+    def create_header(command, command_string = ''.b, session_id = 0, reply_id = 0)
       # Ensure command_string is a binary string
       command_string = command_string.to_s.b
 
@@ -1728,27 +1728,27 @@ module RBZK
       buf = [ command, checksum, session_id, reply_id ].pack('v4')
 
       if @verbose
-        puts "Header components:"
+        puts 'Header components:'
         puts "  Command: #{command}"
         puts "  Checksum: #{checksum}"
         puts "  Session ID: #{session_id}"
         puts "  Reply ID: #{reply_id}"
 
         if !command_string.empty?
-          debug_binary("Command string", command_string)
+          debug_binary('Command string', command_string)
         else
-          puts "Command string: (empty)"
+          puts 'Command string: (empty)'
         end
-        debug_binary("Final header", buf)
+        debug_binary('Final header', buf)
       end
 
       buf + command_string
     end
 
-    def send_command(command, command_string = "".b, response_size = 8)
+    def send_command(command, command_string = ''.b, response_size = 8)
       # Check connection status (except for connect and auth commands)
       if command != CMD_CONNECT && command != CMD_AUTH && !@connected
-        raise RBZK::ZKErrorConnection, "Instance are not connected."
+        raise RBZK::ZKErrorConnection, 'Instance are not connected.'
       end
 
       # In Python, command_string is a bytes object (b'')
@@ -1782,9 +1782,9 @@ module RBZK
           if @verbose
             puts "\nSending TCP packet:"
             puts "Note: In send_command, 'top' variable contains the full packet (header + command packet)"
-            puts "This is because create_tcp_top returns the full packet, not just the header"
-            debug_binary("Command packet (buf)", buf)
-            debug_binary("Full TCP packet (top)", top) # 'top' contains the full packet here
+            puts 'This is because create_tcp_top returns the full packet, not just the header'
+            debug_binary('Command packet (buf)', buf)
+            debug_binary('Full TCP packet (top)', top) # 'top' contains the full packet here
           end
 
           @socket.send(top, 0)
@@ -1793,7 +1793,7 @@ module RBZK
 
           if @verbose
             puts "\nReceived TCP response:"
-            debug_binary("TCP response", @tcp_data_recv)
+            debug_binary('TCP response', @tcp_data_recv)
           end
 
           if @tcp_length == 0
@@ -1960,7 +1960,7 @@ module RBZK
       if @data_recv && @data_recv.size >= 4
         data = @data_recv[0..3]
         @data_recv = @data_recv[4..-1]
-        return data.unpack('L<')[0]
+        return data.unpack1('L<')
       end
 
       0
