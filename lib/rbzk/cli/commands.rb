@@ -429,6 +429,7 @@ module RBZK
 
           # Disable device for exclusive access during modification
           begin
+            puts '✓ Disabling device...'
             conn.disable_device
           rescue StandardError
             nil
@@ -451,9 +452,11 @@ module RBZK
           ensure
             # Re-enable device after modification (always)
             begin
+              puts '✓ Re-enabling device...'
               conn.enable_device
-            rescue StandardError
-              nil
+            rescue StandardError => e
+              # Do not raise - just log a warning if verbose
+              puts "Warning: failed to re-enable device: #{e.message}" if options[:verbose]
             end
           end
         end
@@ -545,10 +548,9 @@ module RBZK
 
           # Extract parameters from options
           uid = options[:uid] || 0
-          user_id = options[:user_id] || ''
           finger_id = options[:finger_id] || 0
 
-          template = conn.get_user_template(uid: uid, temp_id: finger_id, user_id: user_id)
+          template = conn.get_user_template(uid, finger_id)
 
           if template
             puts '✓ Found fingerprint template:'

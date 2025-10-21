@@ -178,8 +178,10 @@ module RBZK
     end
 
     def enable_device
-      send_command(CMD_ENABLEDEVICE)
-      recv_reply
+      cmd_response = send_command(CMD_ENABLEDEVICE)
+      raise RBZK::ZKErrorResponse, "Can't enable device" unless cmd_response && cmd_response[:status]
+
+      @is_enabled = true
       true
     end
 
