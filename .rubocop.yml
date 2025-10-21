@@ -1,0 +1,16 @@
+
+# Layout/SpaceInsideArrayLiteralBrackets:
+#   Enabled: false
+
+Layout/SpaceInsideArrayLiteralBrackets:
+  EnforcedStyle: space
+
+# Allow both single and double-quoted strings
+# Style/StringLiterals:
+#   Enabled: false
+
+# Layout/EndAlignment:
+#   Enabled: false
+
+# Layout/ElseAlignment:
+#   Enabled: false
