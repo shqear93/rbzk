@@ -1,0 +1,14 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "ruby",
+      "package-name": "rbzk",
+      "version-file": "lib/rbzk/version.rb",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "draft": false,
+      "prerelease": false
+    }
+  }
+}
