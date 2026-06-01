@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/shqear93/rbzk/compare/rbzk-v0.1.9...rbzk/v0.1.10) (2026-06-01)
+
+
+### Features
+
+* adopt release-please workflow for automated gem releases ([73e378d](https://github.com/shqear93/rbzk/commit/73e378da9b1b984a290d28b04f284059a17f3712))
+
 ## [0.1.0] - 2023-05-04
 
 - Initial release
